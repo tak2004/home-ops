@@ -1,0 +1,25 @@
+---
+- name: Add Argo CD repository
+  shell: |
+    helm repo add argo https://argoproj.github.io/argo-helm
+    helm repo update
+- name: Generate argocd config.
+  template:
+    src: argocd_values.yml.j2
+    dest: /tmp/argocd_values.yml
+- name: Install Argo CD using Helm
+  shell: helm upgrade --install --create-namespace -n argocd argocd argo/argo-cd --values /tmp/argocd_values.yml
+
+- name: Generate apps of app config.
+  template:
+    src: app_of_apps.yml.j2
+    dest: /tmp/app_of_apps.yml
+- name: Install Argo CD Apps using Helm
+  shell: helm upgrade --install --create-namespace -n argocd argocd-apps argo/argocd-apps --values /tmp/app_of_apps.yml
+
+#- name: Generate ingress manifest.
+#  template:
+#    src: ingress.yml.j2
+#    dest: /tmp/argocd_ingress.yml
+#- name: Create Ingress for Argo CD
+#  shell: kubectl apply -f /tmp/argocd_ingress.yml

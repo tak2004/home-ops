@@ -1,0 +1,28 @@
+---
+- name: Create kubectl directory.
+  ansible.builtin.file:
+    path: ~/.kube/
+    state: directory
+- name: Upload kube config.
+  ansible.builtin.copy:
+    dest: ~/.kube/config
+    src: /tmp/k8s/admin.conf
+- name: Create kubernetes directory.
+  ansible.builtin.file:
+    path: /etc/kubernetes/pki
+    state: directory
+- name: Upload kubernetes keys.
+  ansible.builtin.copy:
+    dest: /etc/kubernetes/pki/ca.crt
+    src: /tmp/k8s/ca.crt
+- name: Get public key of kubernetes.
+  shell: |
+    openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //' | tee ~/.kube/key.pub
+  args:
+    creates: ~/.kube/key.pub
+- name: Join the cluster.
+  shell: |
+    export KUBECONFIG=~/.kube/config
+    kubeadm join --token $( kubeadm token create ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub )
+  args:
+    creates: /var/lib/kubelet/config.yaml

@@ -1,0 +1,42 @@
+all:
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/homelab
+    ansible_user: ansible
+    gateway_ip: 192.168.3.100
+    k8s_init_node: backbone-1
+    k8s_hostname: k8scp
+backbone:
+  hosts:
+    backbone-1:
+      ansible_host: 192.168.3.2
+    backbone-2:
+      ansible_host: 192.168.3.3
+    backbone-3:
+      ansible_host: 192.168.3.4
+netsvc:
+  hosts:
+    netsvc-1:
+      ansible_host: 192.168.3.10
+    netsvc-2:
+      ansible_host: 192.168.3.15 
+bootstrap:
+  vars:
+    ansible_user: root
+    ansible_password: 1234
+    distribution_user: deleteme
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  hosts:
+    backbone-1:
+      static_ip: 192.168.3.2
+    backbone-2:
+      static_ip: 192.168.3.3
+    backbone-3:
+      static_ip: 192.168.3.4      
+    netsvc-1:
+      static_ip: 192.168.3.10
+    netsvc-2:
+      static_ip: 192.168.3.15
+#    netsvc-3:
+#      static_ip: 192.168.3.20
+#    netsvc-4:
+#      static_ip: 192.168.3.25

@@ -1,0 +1,93 @@
+---
+- name: Write noswap systemd service config file
+  template:
+    src: noswap.service.j2
+    dest: /etc/systemd/system/noswap.service
+    owner: root
+    group: root
+    mode: 0644
+  notify: Enable noswap service
+
+# overlay filesystem are necessary for containerd
+- name: Enable Kernel modul overlay.
+  community.general.modprobe:
+    name: overlay
+    state: present
+# enables to bridge traffic
+- name: Enable Kernel module br_netfilter.
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+- name: Allow necessary traffic.
+  ansible.builtin.copy:
+    dest: "/etc/sysctl.d/kubernetes.conf"
+    content: |
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.bridge.bridge-nf-call-iptables = 1
+      net.ipv4.ip_forward = 1
+  register: sysctlconf
+- name: Refresh sysctl.
+  shell: sysctl --system
+  when: sysctlconf.changed
+
+- name: Add cri-o repo key.
+  shell: |
+    curl -fsSL https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/cri-o-apt-keyring.gpg
+- name: Add cri-o repositors.
+  shell: |
+    echo 'deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/ /' | tee /etc/apt/sources.list.d/cri-o.list
+  args:
+    creates: /etc/apt/sources.list.d/cri-o.list
+- name: Install cri-o.
+  ansible.builtin.apt:
+    pkg:
+    - cri-o
+    update_cache: yes
+- name: Enable and ensure cri-o is started.
+  systemd:
+    name: crio
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Add kubernetes repo key.
+  shell: |
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ kubernetes_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+- name: Add kubernetes repositors.
+  shell: |
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubernetes_version }}/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+  args:
+    creates: /etc/apt/sources.list.d/kubernetes.list
+
+- name: Install kubernetes tooling.
+  ansible.builtin.apt:
+    pkg:
+    - kubeadm
+    - kubelet
+    - kubectl
+    update_cache: yes
+
+- name: Add helm repo key.
+  shell: |
+    curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+  args:
+    creates: /usr/share/keyrings/helm.gpg
+- name: Add helm repo.
+  shell: |
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
+  args:
+    creates: /etc/apt/sources.list.d/helm-stable-debian.list
+- name: Install helm.
+  ansible.builtin.apt:
+    name: helm
+    state: latest
+    update_cache: yes
+- name: Add k8s init hostname.
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: '{{ hostvars[k8s_init_node].ansible_host }} {{ k8s_hostname }}'
+    search_string: '{{ k8s_hostname }}'

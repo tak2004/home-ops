@@ -1,0 +1,41 @@
+---
+- name: Create kubectl directory.
+  ansible.builtin.file:
+    path: ~/.kube/
+    state: directory
+- name: Creates etcd certificate directory
+  ansible.builtin.file:
+    path: /etc/kubernetes/pki/etcd
+    state: directory
+- name: Upload kube config.
+  ansible.builtin.copy:
+    dest: ~/.kube/config
+    src: /tmp/k8s/admin.conf
+- name: Upload kubernetes keys.
+  ansible.builtin.copy:
+    dest: /etc/kubernetes/pki/{{ item }}
+    src: /tmp/k8s/{{ item }}
+  with_items:
+    - ca.crt
+    - ca.key
+    - sa.key
+    - sa.pub
+    - front-proxy-ca.crt
+    - front-proxy-ca.key
+    - etcd/ca.crt
+    - etcd/ca.key
+- name: Get public key of kubernetes.
+  shell: |
+    openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //' | tee ~/.kube/key.pub
+  args:
+    creates: ~/.kube/key.pub
+- name: Join the cluster.
+  shell: |
+    export KUBECONFIG=~/.kube/config
+    kubeadm join --token $( kubeadm token create ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+- name: Allow scheduling
+  shell: |
+    export KUBECONFIG=~/.kube/config
+    kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- 2> /dev/null || true

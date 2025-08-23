@@ -1,0 +1,74 @@
+---
+- name: Add Cluster config.
+  ansible.builtin.template:
+    src: kubeadm-config.j2
+    dest: /tmp/kubeadm-config.yaml
+- name: Init cluster.
+  shell: |
+    kubeadm init --config=/tmp/kubeadm-config.yaml | tee /tmp/kubeadm-init.out
+  args:
+    creates: /etc/kubernetes/admin.conf
+- name: Create kubectl directory.
+  ansible.builtin.file:
+    path: /root/.kube/
+    state: directory    
+- name: Copy kube config.
+  command: cp /etc/kubernetes/admin.conf /root/.kube/config
+  args:
+    creates: /root/.kube/config
+
+- name: Add cilium helm repo.
+  shell: |
+    helm repo add cilium https://helm.cilium.io/
+    helm repo update
+- name: Wait until kubernetes is available.
+  ansible.builtin.wait_for:
+    port: 6443
+- name: Install cilium to k8s.
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    helm upgrade --install cilium cilium/cilium --version {{ cilium_version }} --namespace kube-system --reset-values --set ingressController.enabled=true --set ingressController.loadbalancerMode=dedicated --set hubble.relay.enabled=true --set hubble.ui.enabled=true --set gatewayAPI.enabled=true --set envoyConfig.enabled=true --set loadBalancer.l7.backend=envoy
+
+# Download configuration to local system to use it later for joining the cluster.
+# This way the config can stored at any service/place without impact on this code.
+- name: Create temporary directory.
+  become: false
+  ansible.builtin.file:
+    path: /tmp/k8s
+    state: directory
+  delegate_to: 127.0.0.1
+- name: Create temporary etcd directory.
+  become: false
+  ansible.builtin.file:
+    path: /tmp/k8s/etcd
+    state: directory
+  delegate_to: 127.0.0.1
+- name: Wait until k8s config is available.
+  ansible.builtin.wait_for:
+    path: /etc/kubernetes/admin.conf
+- name: Download kube config.
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: /tmp/k8s/
+    flat: true
+- name: Wait until k8s certificates are available.
+  ansible.builtin.wait_for:
+    path: /etc/kubernetes/pki/etcd/ca.key    
+- name: Download kubernetes keys.
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/pki/{{ item }}
+    dest: /tmp/k8s/{{ item }}
+    flat: true
+  with_items:
+    - ca.crt
+    - ca.key
+    - sa.key
+    - sa.pub
+    - front-proxy-ca.crt
+    - front-proxy-ca.key
+    - etcd/ca.crt
+    - etcd/ca.key
+- name: Allow scheduling
+  shell: |
+    export KUBECONFIG=~/.kube/config
+    kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- 2> /dev/null || true

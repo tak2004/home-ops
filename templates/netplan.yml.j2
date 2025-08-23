@@ -1,0 +1,16 @@
+network:
+  version: 2
+  ethernets:
+    zz-all-en:
+      match:
+        name: "en*"
+      optional: true
+      addresses:
+        - {{ static_ip }}/24
+      routes:
+        - to: default
+          via: {{ gateway_ip }}
+      nameservers:
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4

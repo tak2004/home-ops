@@ -1,0 +1,90 @@
+---
+- name: Bootstrap the backbone server
+  hosts: bootstrap
+  become: yes
+
+  tasks:
+  - name: Install required packages
+    ansible.builtin.apt:
+      package: 
+       - netplan.io
+       - systemd-resolved
+       - neovim
+       - s-tui
+       - sudo
+       - gpg
+       - curl
+    notify: networkd restarted
+
+  - name: Update Netplan Configuration
+    template:
+      src: templates/netplan.yml.j2
+      dest: /etc/netplan/01-netcfg.yaml
+      mode: '0600'
+    notify: Apply Netplan Changes
+
+  - name: Set hostname
+    ansible.builtin.hostname:
+      name: "{{ inventory_hostname }}"
+  - name: Resolve hostname to localhost
+    ansible.builtin.lineinfile:
+      path: /etc/hosts
+      line: '127.0.0.1 {{ inventory_hostname }}'
+      search_string: '{{ inventory_hostname }}'
+
+  - name: Create wheel group
+    ansible.builtin.group:
+      name: wheel
+      state: present
+  - name: Allow 'wheel' group to have passwordless sudo
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%wheel'
+      line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+  - name: Add ansible user
+    ansible.builtin.user:
+      name: ansible
+      home: /home/ansible/
+      shell: /bin/bash
+      system: true
+      password: "!"
+      groups: wheel
+      append: yes
+  - name: Install ansible user ssh key
+    authorized_key:
+      user: ansible
+      key: "{{ lookup('file', 'pubkey') }}"
+      state: present
+
+  - name: Install root user ssh key
+    authorized_key:
+      user: root
+      key: "{{ lookup('file', 'pubkey') }}"
+      state: present
+  - name: Remove distribution user
+    ansible.builtin.user:
+      name: "{{ distribution_user }}"
+      remove: yes
+      state: absent
+  - name: Disable ssh password login
+    ansible.builtin.copy:
+      dest: /etc/ssh/sshd_config.d/additional.conf
+      content: "PasswordAuthentication no"
+    notify: restart ssh
+
+  handlers:
+  - name: Apply Netplan Changes
+    command: netplan apply
+    async: 45
+    poll: 0
+  - name: restart ssh
+    service:
+      name: sshd
+      state: restarted
+  - name: networkd restarted
+    service:
+      name: systemd-networkd
+      state: restarted

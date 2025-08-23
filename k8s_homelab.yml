@@ -1,0 +1,7 @@
+---
+- name: Prepare kubernetes nodes
+  hosts:
+  - backbone-2
+  become: yes
+  roles:
+  - k8s_argocd
