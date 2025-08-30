@@ -21,7 +21,7 @@
       src: templates/netplan.yml.j2
       dest: /etc/netplan/01-netcfg.yaml
       mode: '0600'
-    notify: Apply Netplan Changes
+    notify: Generate Netplan
 
   - name: Set hostname
     ansible.builtin.hostname:
@@ -80,6 +80,13 @@
     command: netplan apply
     async: 45
     poll: 0
+    notify: Apply Netplan Changes
+  - name: Generate Netplan
+    command: netplan generate
+    async: 45
+    poll: 0
+    notify: Apply Netplan Changes
+    
   - name: restart ssh
     service:
       name: sshd

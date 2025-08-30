@@ -10,8 +10,8 @@ Run: `ansible-playbook -i inventory.yml k8s.yml`
 
 The playbook will run 5 roles to get the cluster up and running.
 * k8s_prepare_server will install necessary packages and does the configuration.
-* k8s_control_plane_init will initialize the k8s cluster on the specified server.
-* k8s_control_plane_join will join the other control-plane nodes to the cluster to achive a stable state.
+* [k8s_control_plane_init](./roles/k8s_control_plane_init/README.md) will initialize the k8s cluster on the specified server.
+* [k8s_control_plane_join](./roles/k8s_control_plane_join/README.md) will join the other control-plane nodes to the cluster to achive a stable state.
 * k8s_data_plane_join will join the netsvc nodes as data-plane nodes to the cluster.
 
 ## How to install all my services ?
@@ -67,6 +67,7 @@ The very power hungry equipment should provide services which are turned off mos
 ## Hardware Inventory
 Type|Motherboard|RAM|Storage|NIC
 -|-|-|-|-
+Backbone|Dell Wyse 5070|8GB|64GB SSD|1Gbit
 Backbone|Radxa Zero 3e|2GB|16GB sd-card, 128GB Intenso SSD|1GBit
 Netsvc|Gigabyte MJ11-EC1|2x32GB ECC|1TB nvme|Dual 10Gbit SFP+
 
