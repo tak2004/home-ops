@@ -1,14 +1,14 @@
-# Ohne diesen Check haelt keepalived die VIP auch dann, wenn der lokale apiserver
-# tot ist -- VRRP prueft nur, ob der Node lebt. Genau so wurde aus einem
-# Node-Ausfall ein clusterweiter: die VIP zeigte auf einen Node, dessen API nicht
-# mehr antwortete, und kein kubelet erreichte k8scp mehr.
+# Without this check keepalived keeps the VIP even when the local apiserver is
+# dead -- VRRP only tracks whether the node is alive. That is how a single node
+# failure turned into a cluster-wide one: the VIP pointed at a node whose API no
+# longer answered, and no kubelet could reach k8scp any more.
 vrrp_script check_apiserver {
     script "/bin/bash -c '</dev/tcp/127.0.0.1/6443'"
     interval 3
     timeout 2
     fall 2
     rise 2
-    # -50 druckt die Prioritaet unter die eines gesunden BACKUP, der uebernimmt dann.
+    # -50 drops the priority below that of a healthy BACKUP, which then takes over.
     weight -50
 }
 

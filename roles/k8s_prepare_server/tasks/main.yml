@@ -86,9 +86,9 @@
     name: helm
     state: latest
     update_cache: yes
-# Frueher zeigte k8scp auf den Init-Node. Damit haengt der Cluster-Endpunkt an einem
-# einzelnen Host -- faellt der aus, ist die API fuer alle weg, obwohl keepalived
-# genau dafuer eine VIP haelt. Voraussetzung: backbone.yml (keepalived) lief vorher.
+# k8scp used to point at the init node, tying the cluster endpoint to a single host:
+# if it went down the API was gone for everyone, even though keepalived holds a VIP
+# for exactly this case. Requires backbone.yml (keepalived) to have run first.
 - name: Remove stale k8scp entries from /etc/hosts.
   ansible.builtin.lineinfile:
     path: /etc/hosts

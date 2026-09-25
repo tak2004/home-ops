@@ -5,9 +5,9 @@
   - netsvc
   become: yes
   pre_tasks:
-  # k8scp zeigt auf die keepalived-VIP. Laeuft keepalived noch nicht, gibt es keinen
-  # Endpunkt -- das faellt sonst erst spaeter als schwer deutbarer Timeout im
-  # kubeadm-Lauf auf. Port 22, weil der auf jedem Node offen ist.
+  # k8scp resolves to the keepalived VIP. Without keepalived running there is no
+  # endpoint at all, which would otherwise surface much later as a hard-to-read
+  # timeout during kubeadm. Port 22, because that is open on every node.
   - name: Ensure the keepalived VIP is up (run backbone.yml first).
     ansible.builtin.wait_for:
       host: "{{ virtual_ip }}"

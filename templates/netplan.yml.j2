@@ -2,8 +2,8 @@ network:
   version: 2
   renderer: networkd
   ethernets:
-    # Konkretes Interface statt match "en*": der Wildcard-Match traf auf backbone-1
-    # auch den USB-Ethernet-Adapter, beide NICs bekamen dieselbe Adresse.
+    # Named interface instead of a match on "en*": the wildcard also matched the
+    # USB ethernet adapter on backbone-1, so both NICs ended up with one address.
     {{ nic }}:
       optional: true
       addresses:

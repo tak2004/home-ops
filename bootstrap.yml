@@ -17,7 +17,7 @@
        - curl
     notify: networkd restarted
 
-  # Nur die ARM-SBCs booten ueber armbianEnv.txt; auf x86 existiert die Datei nicht.
+  # Only the ARM SBCs boot via armbianEnv.txt; the file does not exist on x86.
   - name: Check for Armbian boot configuration
     ansible.builtin.stat:
       path: /boot/armbianEnv.txt
@@ -37,19 +37,19 @@
       line: 'extraargs={{ armbian_extraargs }}'
     when: armbian_env.stat.exists
 
-  # Ohne laufende Zeitsynchronisation driftet die Uhr auf Hardware ohne verlaessliche
-  # RTC weg. Zertifikate bekommen dann ein notBefore in der Zukunft und werden von den
-  # anderen Nodes abgelehnt ("tls alert certificate expired") -- ein kubeadm join
-  # scheitert daran, ohne dass die Ursache irgendwo Zeit erwaehnt.
+  # Without time synchronisation the clock drifts on hardware without a reliable RTC.
+  # Freshly issued certificates then carry a notBefore in the future and are rejected
+  # by the other nodes ("tls alert certificate expired") -- a kubeadm join fails on
+  # this without any message ever mentioning time.
   - name: Enable time synchronisation
     ansible.builtin.systemd_service:
       name: systemd-timesyncd
       enabled: true
       state: started
 
-  # Armbian legt 10-dhcp-all-interfaces.yaml an. Die hoehere Nummer gewinnt gegen
-  # 01-netcfg.yaml, d.h. ohne diesen Schritt ueberschreibt DHCP die statische Adresse
-  # -- lautlos, die statische Konfiguration steht dann wirkungslos in der Datei.
+  # Armbian ships 10-dhcp-all-interfaces.yaml. The higher number wins over
+  # 01-netcfg.yaml, so without this step DHCP overrides the static address -- silently,
+  # leaving the static configuration in the file with no effect at all.
   - name: Disable Armbian DHCP netplan config
     ansible.builtin.command:
       cmd: mv /etc/netplan/10-dhcp-all-interfaces.yaml /root/10-dhcp-all-interfaces.yaml.disabled
