@@ -32,7 +32,7 @@
 - name: Join the cluster.
   shell: |
     export KUBECONFIG=~/.kube/config
-    kubeadm join --token $( kubeadm token create ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane
+    kubeadm join --token $( kubeadm token create --kubeconfig /etc/kubernetes/admin.conf ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane --skip-phases=addon/kube-proxy
   args:
     creates: /etc/kubernetes/kubelet.conf
 - name: Allow scheduling

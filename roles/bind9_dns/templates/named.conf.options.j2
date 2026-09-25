@@ -1,0 +1,13 @@
+options {
+  listen-on port 53 { {{ virtual_ip }}; };
+  allow-query     { any; };
+  recursion no;
+  directory "/var/cache/bind";
+  allow-query-cache { none; };
+};
+
+zone "home" {
+  type primary;
+  file "/var/lib/bin/db.home";
+  notify yes;
+};

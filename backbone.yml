@@ -1,0 +1,26 @@
+---
+- name: Get the backbone services running
+  hosts: backbone
+  become: yes
+  tasks:
+  - name: Install required packages
+    ansible.builtin.apt:
+      package: 
+       - keepalived
+  - name: Configure keepalived.
+    ansible.builtin.template:
+      src: templates/keepalived.conf.j2
+      dest: /etc/keepalived/keepalived.conf
+    notify: Reload keepalived
+  - name: Enable keepalived
+    service:
+      name: keepalived
+      enabled: yes
+      state: started
+  roles:
+  - bind9_dns
+  handlers:
+  - name: Reload keepalived
+    service:
+      name: keepalived
+      state: reloaded

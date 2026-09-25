@@ -73,12 +73,12 @@
 
 - name: Add helm repo key.
   shell: |
-    curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+    curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | gpg --dearmor | tee /usr/share/keyrings/helm.gpg > /dev/null
   args:
     creates: /usr/share/keyrings/helm.gpg
 - name: Add helm repo.
   shell: |
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
+    echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
   args:
     creates: /etc/apt/sources.list.d/helm-stable-debian.list
 - name: Install helm.
@@ -86,8 +86,17 @@
     name: helm
     state: latest
     update_cache: yes
-- name: Add k8s init hostname.
+# Frueher zeigte k8scp auf den Init-Node. Damit haengt der Cluster-Endpunkt an einem
+# einzelnen Host -- faellt der aus, ist die API fuer alle weg, obwohl keepalived
+# genau dafuer eine VIP haelt. Voraussetzung: backbone.yml (keepalived) lief vorher.
+- name: Remove stale k8scp entries from /etc/hosts.
   ansible.builtin.lineinfile:
     path: /etc/hosts
-    line: '{{ hostvars[k8s_init_node].ansible_host }} {{ k8s_hostname }}'
+    regexp: '^(?!{{ virtual_ip | regex_escape }}\s+{{ k8s_hostname }}\s*$).*\s{{ k8s_hostname }}\s*$'
+    state: absent
+
+- name: Point k8scp at the keepalived VIP.
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: '{{ virtual_ip }} {{ k8s_hostname }}'
     search_string: '{{ k8s_hostname }}'

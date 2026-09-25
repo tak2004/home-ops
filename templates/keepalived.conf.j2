@@ -1,0 +1,41 @@
+# Ohne diesen Check haelt keepalived die VIP auch dann, wenn der lokale apiserver
+# tot ist -- VRRP prueft nur, ob der Node lebt. Genau so wurde aus einem
+# Node-Ausfall ein clusterweiter: die VIP zeigte auf einen Node, dessen API nicht
+# mehr antwortete, und kein kubelet erreichte k8scp mehr.
+vrrp_script check_apiserver {
+    script "/bin/bash -c '</dev/tcp/127.0.0.1/6443'"
+    interval 3
+    timeout 2
+    fall 2
+    rise 2
+    # -50 druckt die Prioritaet unter die eines gesunden BACKUP, der uebernimmt dann.
+    weight -50
+}
+
+vrrp_instance backbone {
+    state {% if inventory_hostname == k8s_init_node %}MASTER
+{% else %}BACKUP
+{% endif %}
+    interface {{ nic }}
+    virtual_router_id 51
+    priority {{ 255 if inventory_hostname == k8s_init_node else 254 - ansible_play_hosts_all.index(inventory_hostname) }}
+    advert_int 1
+    unicast_src_ip {{ ansible_default_ipv4.address }}
+    unicast_peer {
+{% for node in groups['backbone'] %}
+{% if node != inventory_hostname %}
+        {{ hostvars[node].ansible_default_ipv4.address }}
+{% endif %}
+{% endfor %}
+    }
+    authentication {
+        auth_type PASS
+        auth_pass backbone
+    }
+    virtual_ipaddress {
+        {{ virtual_ip }}/{{ virtual_mask }}
+    }
+    track_script {
+        check_apiserver
+    }
+}

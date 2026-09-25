@@ -2,23 +2,53 @@ all:
   vars:
     ansible_ssh_private_key_file: ~/.ssh/homelab
     ansible_user: ansible
-    gateway_ip: 192.168.3.100
-    k8s_init_node: backbone-1
+    gateway_ip: 192.168.1.1
+    k8s_init_node: backbone-2
     k8s_hostname: k8scp
+    # k8scp zeigt auf die keepalived-VIP, nicht auf einen einzelnen Node -- sonst
+    # haengt der gesamte Cluster-Endpunkt am Init-Node. Gilt fuer alle Gruppen, weil
+    # k8s_prepare_server auch auf netsvc laeuft.
+    virtual_ip: 192.168.1.10
+    virtual_mask: 24
+    # Die SBCs booten von SD-Karte, Root liegt auf einer USB-SATA-Bridge. Beide
+    # verbauten Bridges implementieren UAS fehlerhaft: unter Last brechen Befehle ab
+    # (uas_eh_abort_handler, cmd_age=30s), das ext4-Journal bricht ab und / geht nach
+    # errors=remount-ro read-only -- der Node faellt aus, ohne dass die Platte defekt
+    # waere. Diese Quirks erzwingen den Rueckfall auf usb-storage (BOT).
+    # Ein Quirk fuer eine nicht verbaute Bridge ist wirkungslos, daher alle gemeinsam.
+    #   0x2537:…  Norelsys (Armbian-Standard)
+    #   0x7825:a2a4  OWC PA023U3     (backbone-2)
+    #   0x152d:0578  JMicron JMS578  (backbone-3)
+    usb_storage_quirks: "0x2537:0x1066:u,0x2537:0x1068:u,0x7825:0xa2a4:u,0x152d:0x0578:u"
+    # fsck.repair=yes, weil die SBCs sonst beim Booten auf einem beschaedigten
+    # Dateisystem stehenbleiben -- die Platte muss dann von Hand an einem anderen
+    # Rechner repariert werden.
+    armbian_extraargs: "cma=256M fsck.repair=yes"
+    # Cilium LoadBalancerIPPool -- muss ein FREIER Bereich sein. Vorher standen hier
+    # die Node-Adressen selbst, d.h. Cilium haette Service-IPs vergeben, die den
+    # Nodes gehoeren.
+    lb_start_ip: 192.168.1.20
+    lb_stop_ip: 192.168.1.29
 backbone:
   hosts:
+    # Achtung: backbone-1 hat .12 und backbone-2 hat .11 -- nicht vertauschen.
+    # backbone-2 ist der urspruengliche Init-Node, seine control plane und alle
+    # Zertifikate sind fest auf 192.168.1.11 ausgestellt.
     backbone-1:
-      ansible_host: 192.168.3.2
+      ansible_host: 192.168.1.12
+      nic: enp1s0
     backbone-2:
-      ansible_host: 192.168.3.3
+      ansible_host: 192.168.1.11
+      nic: end1
     backbone-3:
-      ansible_host: 192.168.3.4
+      ansible_host: 192.168.1.13
+      nic: end1
 netsvc:
   hosts:
     netsvc-1:
       ansible_host: 192.168.3.10
     netsvc-2:
-      ansible_host: 192.168.3.15 
+      ansible_host: 192.168.3.15
 bootstrap:
   vars:
     ansible_user: root
@@ -27,15 +57,18 @@ bootstrap:
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   hosts:
     backbone-1:
-      static_ip: 192.168.3.2
+      static_ip: 192.168.1.12
     backbone-2:
-      static_ip: 192.168.3.3
+      static_ip: 192.168.1.11
     backbone-3:
-      static_ip: 192.168.3.4      
-    netsvc-1:
-      static_ip: 192.168.3.10
-    netsvc-2:
-      static_ip: 192.168.3.15
+      static_ip: 192.168.1.13
+# netsvc-1/-2 sind derzeit down und haengen noch im alten 192.168.3.0/24.
+# Erst wieder eintragen, wenn die Hosts erreichbar sind und die Ziel-IPs feststehen --
+# sonst konfiguriert ein bootstrap-Lauf sie auf das alte Netz zurueck.
+#    netsvc-1:
+#      static_ip: 192.168.1.?
+#    netsvc-2:
+#      static_ip: 192.168.1.?
 #    netsvc-3:
 #      static_ip: 192.168.3.20
 #    netsvc-4:

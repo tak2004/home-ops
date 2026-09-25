@@ -1,9 +1,21 @@
 ---
 - name: Prepare kubernetes nodes
-  hosts: 
+  hosts:
   - backbone
   - netsvc
   become: yes
+  pre_tasks:
+  # k8scp zeigt auf die keepalived-VIP. Laeuft keepalived noch nicht, gibt es keinen
+  # Endpunkt -- das faellt sonst erst spaeter als schwer deutbarer Timeout im
+  # kubeadm-Lauf auf. Port 22, weil der auf jedem Node offen ist.
+  - name: Ensure the keepalived VIP is up (run backbone.yml first).
+    ansible.builtin.wait_for:
+      host: "{{ virtual_ip }}"
+      port: 22
+      timeout: 10
+    delegate_to: localhost
+    become: false
+    run_once: true
   roles:
   - k8s_prepare_server
 

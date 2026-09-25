@@ -1,0 +1,20 @@
+l2announcements:
+  enabled: true
+kubeProxyReplacement: true
+loadBalancer:
+  l7:
+    backend: envoy
+envoyConfig:
+  enabled: true
+gatewayAPI:
+  enabled: true
+hubble:
+  ui:
+    enabled: true
+  relay:
+    enabled: true
+ingressController:
+  enabled: true
+  loadBalancerMode: dedicated
+k8sServiceHost: {{ k8s_hostname }}
+k8sServicePort: 6443

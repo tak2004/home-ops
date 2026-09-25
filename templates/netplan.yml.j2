@@ -1,9 +1,10 @@
 network:
   version: 2
+  renderer: networkd
   ethernets:
-    zz-all-en:
-      match:
-        name: "en*"
+    # Konkretes Interface statt match "en*": der Wildcard-Match traf auf backbone-1
+    # auch den USB-Ethernet-Adapter, beide NICs bekamen dieselbe Adresse.
+    {{ nic }}:
       optional: true
       addresses:
         - {{ static_ip }}/24

@@ -6,15 +6,55 @@
   tasks:
   - name: Install required packages
     ansible.builtin.apt:
-      package: 
+      package:
        - netplan.io
        - systemd-resolved
+       - systemd-timesyncd
        - neovim
        - s-tui
        - sudo
        - gpg
        - curl
     notify: networkd restarted
+
+  # Nur die ARM-SBCs booten ueber armbianEnv.txt; auf x86 existiert die Datei nicht.
+  - name: Check for Armbian boot configuration
+    ansible.builtin.stat:
+      path: /boot/armbianEnv.txt
+    register: armbian_env
+
+  - name: Disable UAS for the USB-SATA bridges
+    ansible.builtin.lineinfile:
+      path: /boot/armbianEnv.txt
+      regexp: '^usbstoragequirks='
+      line: 'usbstoragequirks={{ usb_storage_quirks }}'
+    when: armbian_env.stat.exists
+
+  - name: Repair the root filesystem automatically on boot
+    ansible.builtin.lineinfile:
+      path: /boot/armbianEnv.txt
+      regexp: '^extraargs='
+      line: 'extraargs={{ armbian_extraargs }}'
+    when: armbian_env.stat.exists
+
+  # Ohne laufende Zeitsynchronisation driftet die Uhr auf Hardware ohne verlaessliche
+  # RTC weg. Zertifikate bekommen dann ein notBefore in der Zukunft und werden von den
+  # anderen Nodes abgelehnt ("tls alert certificate expired") -- ein kubeadm join
+  # scheitert daran, ohne dass die Ursache irgendwo Zeit erwaehnt.
+  - name: Enable time synchronisation
+    ansible.builtin.systemd_service:
+      name: systemd-timesyncd
+      enabled: true
+      state: started
+
+  # Armbian legt 10-dhcp-all-interfaces.yaml an. Die hoehere Nummer gewinnt gegen
+  # 01-netcfg.yaml, d.h. ohne diesen Schritt ueberschreibt DHCP die statische Adresse
+  # -- lautlos, die statische Konfiguration steht dann wirkungslos in der Datei.
+  - name: Disable Armbian DHCP netplan config
+    ansible.builtin.command:
+      cmd: mv /etc/netplan/10-dhcp-all-interfaces.yaml /root/10-dhcp-all-interfaces.yaml.disabled
+      removes: /etc/netplan/10-dhcp-all-interfaces.yaml
+    notify: Generate Netplan
 
   - name: Update Netplan Configuration
     template:
@@ -80,7 +120,6 @@
     command: netplan apply
     async: 45
     poll: 0
-    notify: Apply Netplan Changes
   - name: Generate Netplan
     command: netplan generate
     async: 45
