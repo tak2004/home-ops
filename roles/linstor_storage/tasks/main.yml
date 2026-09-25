@@ -1,0 +1,59 @@
+---
+# DRBD is an out-of-tree module that the LINSTOR satellite compiles on first start.
+# Without headers matching the *running* kernel the build fails, and the only symptom
+# is a satellite stuck in CrashLoopBackOff. The tiebreaker needs the module too: its
+# vote is a diskless DRBD resource.
+- name: Install kernel headers for the DRBD module build
+  ansible.builtin.apt:
+    name:
+      - linux-headers-{{ ansible_kernel }}
+      - build-essential
+    state: present
+
+# LINSTOR's FILE_THIN pool stores its volumes as sparse files in a directory. Pointed
+# straight at the root filesystem it has no size limit at all, so a runaway volume
+# would fill / and take the node down with it. A loop-mounted image gives the pool a
+# hard ceiling: it can fill up without anything outside it noticing.
+- name: Create the LINSTOR pool image
+  ansible.builtin.command:
+    cmd: fallocate -l {{ linstor_pool_size }} {{ linstor_pool_image }}
+    creates: "{{ linstor_pool_image }}"
+  when: linstor_node == 'disk'
+
+- name: Create a filesystem on the pool image
+  community.general.filesystem:
+    fstype: ext4
+    dev: "{{ linstor_pool_image }}"
+    # mkfs refuses a regular file without it.
+    force: true
+  when: linstor_node == 'disk'
+
+- name: Mount the pool image
+  ansible.posix.mount:
+    path: "{{ linstor_pool_dir }}"
+    src: "{{ linstor_pool_image }}"
+    fstype: ext4
+    opts: loop
+    # Written to fstab, so the pool survives a reboot. nofail would hide a broken
+    # image until a volume fails to attach, so let the boot complain instead.
+    state: mounted
+  when: linstor_node == 'disk'
+
+# The operator picks its nodes by label: every LINSTOR node runs a satellite, and
+# only the ones carrying a disk get the storage pool.
+- name: Label the node for LINSTOR
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig /etc/kubernetes/admin.conf label node {{ inventory_hostname }}
+      node-role.kubernetes.io/storage= --overwrite
+  delegate_to: "{{ k8s_init_node }}"
+  changed_when: true
+
+- name: Label the node as carrying a storage pool
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig /etc/kubernetes/admin.conf label node {{ inventory_hostname }}
+      node-role.kubernetes.io/storage-disk= --overwrite
+  delegate_to: "{{ k8s_init_node }}"
+  changed_when: true
+  when: linstor_node == 'disk'

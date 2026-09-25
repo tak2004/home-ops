@@ -1,0 +1,4 @@
+---
+linstor_pool_size: 300G
+linstor_pool_image: /var/lib/linstor-pool.img
+linstor_pool_dir: /var/lib/linstor-pools/pool1

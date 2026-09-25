@@ -53,6 +53,10 @@ backbone:
     backbone-1:
       ansible_host: 192.168.1.12
       nic: enp1s0
+      # Third vote for the two-replica DRBD resources, without storing data itself.
+      # backbone-2 and -3 cannot do this: DRBD would have to be built for their
+      # arm64 vendor kernel, and they have no kernel headers available.
+      linstor_node: tiebreaker
     backbone-2:
       ansible_host: 192.168.1.11
       nic: end1
@@ -60,11 +64,23 @@ backbone:
       ansible_host: 192.168.1.13
       nic: end1
 netsvc:
+  vars:
+    nic: enp6s0f0
+    # Second SFP+ port, cabled directly between the two nodes (no switch in
+    # between). DRBD replicates over this link, so storage traffic never touches
+    # the 1G home network. Jumbo frames: measured 9.90 Gbit/s at 0.24 ms.
+    replication_nic: enp6s0f1
+    replication_mask: 24
+    replication_mtu: 9000
+    # Carries a storage pool. See the linstor_storage role.
+    linstor_node: disk
   hosts:
     netsvc-1:
-      ansible_host: 192.168.3.10
+      ansible_host: 192.168.1.14
+      replication_ip: 10.10.10.1
     netsvc-2:
-      ansible_host: 192.168.3.15
+      ansible_host: 192.168.1.15
+      replication_ip: 10.10.10.2
 bootstrap:
   vars:
     ansible_user: root
@@ -78,13 +94,10 @@ bootstrap:
       static_ip: 192.168.1.11
     backbone-3:
       static_ip: 192.168.1.13
-# netsvc-1/-2 are currently down and still on the old 192.168.3.0/24 network.
-# Only re-add them once the hosts are reachable and their target IPs are settled,
-# otherwise a bootstrap run reconfigures them back onto the old network.
-#    netsvc-1:
-#      static_ip: 192.168.1.?
-#    netsvc-2:
-#      static_ip: 192.168.1.?
+    netsvc-1:
+      static_ip: 192.168.1.14
+    netsvc-2:
+      static_ip: 192.168.1.15
 #    netsvc-3:
 #      static_ip: 192.168.3.20
 #    netsvc-4:

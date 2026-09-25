@@ -1,0 +1,11 @@
+---
+# Two replicas cannot form a quorum on their own, so a third node votes without
+# storing anything (linstor_node: tiebreaker in the inventory). Volumes themselves
+# live on the netsvc nodes only -- the backbone SBCs run root over a USB-SATA bridge,
+# which is not somewhere replicated data belongs.
+- name: Prepare replicated storage
+  hosts: backbone:netsvc
+  become: yes
+  roles:
+  - role: linstor_storage
+    when: linstor_node is defined

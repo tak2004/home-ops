@@ -15,3 +15,12 @@ network:
         addresses:
           - 8.8.8.8
           - 8.8.4.4
+{% if replication_ip is defined %}
+    # Dedicated storage link, cabled point to point. No gateway and no nameserver:
+    # nothing but DRBD replication is routed here.
+    {{ replication_nic }}:
+      optional: true
+      mtu: {{ replication_mtu }}
+      addresses:
+        - {{ replication_ip }}/{{ replication_mask }}
+{% endif %}

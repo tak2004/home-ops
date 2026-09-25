@@ -33,3 +33,5 @@
   become: yes  
   roles:  
   - k8s_data_plane_join
+
+- import_playbook: storage.yml
