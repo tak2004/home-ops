@@ -30,27 +30,65 @@
   shell: sysctl --system
   when: sysctlconf.changed
 
-- name: Add cri-o repo key.
-  shell: |
-    curl -fsSL https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
-  args:
-    creates: /etc/apt/keyrings/cri-o-apt-keyring.gpg
-- name: Add cri-o repositors.
-  shell: |
-    echo 'deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/ /' | tee /etc/apt/sources.list.d/cri-o.list
-  args:
-    creates: /etc/apt/sources.list.d/cri-o.list
-- name: Install cri-o.
+# Helm used to come from baltocdn, whose certificate no longer verifies. One
+# unreachable source makes apt-get update fail as a whole, so every later package
+# task dies with "Failed to update apt cache" -- nothing points at the old repo.
+- name: Remove repositories that were replaced
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/helm-stable-debian.list.old
+    - /etc/apt/sources.list.d/cri-o.list
+  tags: always
+
+- name: Drop the stale baltocdn helm repository
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list.d/helm-stable-debian.list
+    regexp: 'baltocdn'
+    state: absent
+  failed_when: false
+  tags: always
+
+# containerd instead of cri-o: it is the runtime the distribution packages and
+# the one Cilium and Piraeus are tested against. Mixing both on one node leaves
+# two CRI sockets, and kubelet silently picks whichever it finds first.
+- name: Install containerd
   ansible.builtin.apt:
-    pkg:
-    - cri-o
+    name: containerd
+    state: present
     update_cache: yes
-- name: Enable and ensure cri-o is started.
-  systemd:
-    name: crio
-    state: started
-    enabled: true
-    daemon_reload: true
+  tags: containerd
+
+- name: Generate the containerd configuration
+  ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  notify: Restart containerd
+  tags: containerd
+
+# kubelet runs with the systemd cgroup driver. With containerd left on cgroupfs the
+# two disagree about who owns a container's cgroup, which shows up as pods that are
+# evicted or restarted under memory pressure for no visible reason.
+- name: Use the systemd cgroup driver
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^(\s*SystemdCgroup\s*=\s*)false$'
+    replace: '\1true'
+  notify: Restart containerd
+  tags: containerd
+
+# Debian ships bin_dir = /usr/lib/cni, while Cilium installs its plugin into
+# /opt/cni/bin. Nothing complains until a *new* pod is scheduled -- running pods
+# keep their networking, so the node looks Ready while every sandbox creation
+# fails with 'failed to find plugin "cilium-cni"'.
+- name: Point containerd at the CNI plugin directory Cilium installs into
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^(\s*bin_dir\s*=\s*)".*"$'
+    replace: '\1"/opt/cni/bin"'
+  notify: Restart containerd
+  tags: containerd
 
 - name: Add kubernetes repo key.
   shell: |

@@ -1,3 +1,2 @@
 ---
 kubernetes_version: v1.33
-crio_version: v1.33
