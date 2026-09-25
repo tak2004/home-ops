@@ -57,6 +57,8 @@ backbone:
       # backbone-2 and -3 cannot do this: DRBD would have to be built for their
       # arm64 vendor kernel, and they have no kernel headers available.
       linstor_node: tiebreaker
+      # The only control-plane node with enough memory to also take workloads.
+      k8s_schedulable: true
     backbone-2:
       ansible_host: 192.168.1.11
       nic: end1

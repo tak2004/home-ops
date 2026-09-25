@@ -35,7 +35,23 @@
     kubeadm join --token $( kubeadm token create --kubeconfig /etc/kubernetes/admin.conf ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane --skip-phases=addon/kube-proxy
   args:
     creates: /etc/kubernetes/kubelet.conf
-- name: Allow scheduling
-  shell: |
-    export KUBECONFIG=~/.kube/config
-    kubectl taint node $(hostname) node-role.kubernetes.io/control-plane:NoSchedule- 2> /dev/null || true
+# Control-plane nodes carry a NoSchedule taint. backbone-1 has 8 GB and acts as the
+# third node for workloads whose anti-affinity needs one (argocd's redis-ha, the
+# LINSTOR tiebreaker); the other two have 2 GB and must stay free of ordinary pods --
+# an apiserver starved there takes the whole cluster endpoint with it.
+#
+# This used to run against ~/.kube/config, which on backbone-1 was a leftover from an
+# earlier cluster, and swallowed the resulting error with "|| true". The taint stayed.
+- name: Set whether ordinary workloads may be scheduled here
+  ansible.builtin.command:
+    cmd: >-
+      kubectl --kubeconfig /etc/kubernetes/admin.conf taint node {{ inventory_hostname }}
+      node-role.kubernetes.io/control-plane:NoSchedule{{ '-' if k8s_schedulable | default(false) else '' }}
+  register: taint_result
+  changed_when: taint_result.rc == 0
+  # Both messages mean the node is already in the requested state.
+  failed_when: >-
+    taint_result.rc != 0
+    and 'not found' not in taint_result.stderr
+    and 'already has' not in taint_result.stderr
+  tags: scheduling
