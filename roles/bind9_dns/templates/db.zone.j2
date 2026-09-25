@@ -1,0 +1,26 @@
+; Managed by Ansible -- changes are overwritten on the next run.
+$TTL 300
+@       IN      SOA     ns.{{ dns_zone }}. admin.{{ dns_zone }}. (
+                        1          ; serial, static: this is a primary without
+                                   ; secondaries, so nothing polls for changes
+                        3600       ; refresh
+                        600        ; retry
+                        86400      ; expire
+                        300 )      ; negative cache TTL
+
+        IN      NS      ns.{{ dns_zone }}.
+
+; The nameserver answers on the keepalived VIP, so the record follows the VIP
+; rather than any single node.
+ns      IN      A       {{ virtual_ip }}
+
+; Everything below {{ k8s_subdomain }}.{{ dns_zone }} is delegated to the cluster
+; ingress: a new Ingress only needs a matching host rule, no DNS change. The
+; wildcard resolves to the ingress LoadBalancer, which routes by Host header.
+*.{{ k8s_subdomain }}   IN      A       {{ ingress_ip }}
+{{ k8s_subdomain }}     IN      A       {{ ingress_ip }}
+
+{% for name, ip in dns_records.items() %}
+; Services reached directly via their own LoadBalancer IP, bypassing the ingress.
+{{ "%-12s"|format(name) }}IN      A       {{ ip }}
+{% endfor %}

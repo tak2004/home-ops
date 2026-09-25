@@ -1,13 +1,27 @@
 options {
-  listen-on port 53 { {{ virtual_ip }}; };
-  allow-query     { any; };
-  recursion no;
+  // Listen on every address rather than only the VIP: keepalived moves the VIP
+  // between nodes, and bind9 can only bind an address that is present at start-up.
+  // Listening everywhere means whichever node currently holds the VIP answers,
+  // without needing a restart when it moves.
+  listen-on port 53 { any; };
+  allow-query { {{ dns_allow_query }}; };
+
+  // Authoritative for the internal zone, forwarding everything else to the router,
+  // so clients only need this one resolver.
+  recursion yes;
+  allow-recursion { {{ dns_allow_query }}; };
+  forwarders { {{ gateway_ip }}; };
+  forward only;
+
+  // The upstream resolver is the home router, which does not provide a usable
+  // chain of trust for validation.
+  dnssec-validation no;
+
   directory "/var/cache/bind";
-  allow-query-cache { none; };
 };
 
-zone "home" {
+zone "{{ dns_zone }}" {
   type primary;
-  file "/var/lib/bin/db.home";
-  notify yes;
+  file "/var/lib/bind/db.{{ dns_zone }}";
+  notify no;
 };

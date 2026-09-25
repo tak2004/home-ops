@@ -1,13 +1,22 @@
 l2announcements:
   enabled: true
 kubeProxyReplacement: true
+# Without this Cilium falls back to legacy host routing and iptables masquerading:
+# "BPF host routing requires enable-bpf-masquerade. Falling back to legacy host
+# routing". Only with it does the eBPF datapath actually get used.
+bpf:
+  masquerade: true
 loadBalancer:
   l7:
     backend: envoy
 envoyConfig:
   enabled: true
+# Disabled on purpose: enabling it without the full set of Gateway API CRDs makes the
+# controller abort with "Required GatewayAPI resources are not found", and that took
+# the ingress LoadBalancer provisioning down with it -- ingress services stayed
+# ClusterIP without an external address. Only turn this on together with the CRDs.
 gatewayAPI:
-  enabled: true
+  enabled: false
 hubble:
   ui:
     enabled: true
@@ -15,6 +24,11 @@ hubble:
     enabled: true
 ingressController:
   enabled: true
-  loadBalancerMode: dedicated
+  # Note the spelling: Cilium reads "loadbalancerMode" (lowercase b). The previous
+  # "loadBalancerMode" was silently ignored by Helm.
+  # shared: every ingress is served by the single cilium-ingress LoadBalancer, which
+  # is what the *.{{ k8s_subdomain }}.{{ dns_zone }} wildcard in bind9 points at. With
+  # "dedicated" each ingress gets its own IP and the wildcard would not work.
+  loadbalancerMode: shared
 k8sServiceHost: {{ k8s_hostname }}
 k8sServicePort: 6443

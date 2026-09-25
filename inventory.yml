@@ -28,6 +28,23 @@ all:
     # belong to the nodes.
     lb_start_ip: 192.168.1.20
     lb_stop_ip: 192.168.1.29
+    # bind9 runs on every backbone node and is authoritative for this zone. All of
+    # them listen, but only the node holding the VIP answers -- that way the Fritzbox
+    # needs just one nameserver address, and DNS survives a node failure.
+    dns_zone: home
+    dns_allow_query: "192.168.1.0/24"
+    # Everything under this subdomain is delegated to the cluster ingress via a
+    # wildcard record, so a new Ingress needs no DNS change at all -- only a host
+    # rule like dashboard.svc.home. ingress_ip is the LoadBalancer address of
+    # cilium-ingress and must stay inside the lb pool.
+    k8s_subdomain: svc
+    ingress_ip: 192.168.1.20
+    # Service addresses must be pinned in the LoadBalancer services as well
+    # (lbipam.cilium.io/ips), otherwise Cilium may hand out a different IP from the
+    # pool and these records go stale.
+    dns_records:
+      argocd: 192.168.1.21
+      headlamp: 192.168.1.22
 backbone:
   hosts:
     # Note: backbone-1 is .12 and backbone-2 is .11 -- do not swap them.
