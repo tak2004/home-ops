@@ -85,3 +85,23 @@
   delegate_to: "{{ k8s_init_node }}"
   changed_when: true
   when: linstor_node == 'disk'
+
+# LINSTOR registers one interface per node, taken from the pod address, so DRBD
+# would replicate over the 1G home network. Registering the storage link as a
+# second interface lets the LinstorNodeConnection point the replication at it.
+# There is no CRD for node interfaces, hence the exec; "already exists" makes the
+# create a no-op on reruns.
+- name: Register the replication interface with LINSTOR
+  ansible.builtin.shell:
+    cmd: >-
+      kubectl --kubeconfig /etc/kubernetes/admin.conf -n piraeus-datastore
+      exec deploy/linstor-controller --
+      linstor node interface create {{ inventory_hostname }} replication {{ replication_ip }}
+  delegate_to: "{{ k8s_init_node }}"
+  register: linstor_interface
+  changed_when: "'SUCCESS' in linstor_interface.stdout"
+  failed_when:
+    - linstor_interface.rc != 0
+    - "'already exists' not in linstor_interface.stdout"
+  when: replication_ip is defined
+  tags: linstor-net
