@@ -14,6 +14,10 @@ server:
     enabled: true
     ingressClassName: cilium
     hostname: {{ argocd_domain }}
+    annotations:
+      # cert-manager issues the certificate from the private home-ca.
+      cert-manager.io/cluster-issuer: home-ca
+    tls: true
 
 configs:
   params:
