@@ -56,6 +56,20 @@
       removes: /etc/netplan/10-dhcp-all-interfaces.yaml
     notify: Generate Netplan
 
+  # netplan renders through systemd-networkd. A NetworkManager running alongside it
+  # starts its own dhclient and adds a second, *dynamic* address to the same NIC --
+  # nothing in /etc/netplan shows it, and nothing reports an error. On backbone-1 that
+  # was the router's old DHCP reservation for this MAC: the node gave itself the IP of
+  # backbone-2, routed every packet for that peer to its own loopback, and etcd lost
+  # quorum after each reboot.
+  - name: Disable NetworkManager in favour of systemd-networkd
+    ansible.builtin.systemd:
+      name: NetworkManager
+      state: stopped
+      enabled: false
+      masked: true
+    failed_when: false
+
   - name: Update Netplan Configuration
     template:
       src: templates/netplan.yml.j2
