@@ -8,6 +8,19 @@ server:
   autoscaling:
     enabled: true
     minReplicas: 2
+  # Reached through the shared cilium-ingress, which the *.{{ k8s_subdomain }}.{{ dns_zone }}
+  # wildcard in bind9 resolves to -- no dedicated LoadBalancer IP or DNS record needed.
+  ingress:
+    enabled: true
+    ingressClassName: cilium
+    hostname: {{ argocd_domain }}
+
+configs:
+  params:
+    # Argo CD serves HTTPS with its own self-signed certificate by default. Behind an
+    # ingress that means double TLS, so the server runs plain HTTP here and the ingress
+    # terminates the connection.
+    server.insecure: true
 
 repoServer:
   autoscaling:

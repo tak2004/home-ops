@@ -39,12 +39,12 @@ all:
     # cilium-ingress and must stay inside the lb pool.
     k8s_subdomain: svc
     ingress_ip: 192.168.1.20
-    # Service addresses must be pinned in the LoadBalancer services as well
-    # (lbipam.cilium.io/ips), otherwise Cilium may hand out a different IP from the
-    # pool and these records go stale.
-    dns_records:
-      argocd: 192.168.1.21
-      headlamp: 192.168.1.22
+    # Extra A records for hosts reached directly instead of through the ingress.
+    # Normally empty: services belong under the wildcard above, which needs no DNS
+    # change per service. Any entry here also has to be pinned on the service with
+    # lbipam.cilium.io/ips, or Cilium may hand out a different IP and the record
+    # goes stale.
+    dns_records: {}
 backbone:
   hosts:
     # Note: backbone-1 is .12 and backbone-2 is .11 -- do not swap them.

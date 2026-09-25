@@ -8,14 +8,14 @@
     src: argocd_values.yml.j2
     dest: /tmp/argocd_values.yml
 - name: Install Argo CD using Helm
-  shell: helm upgrade --install --create-namespace -n argocd argocd argo/argo-cd --values /tmp/argocd_values.yml
+  shell: helm upgrade --install --create-namespace -n argocd argocd argo/argo-cd --version {{ argocd_version }} --values /tmp/argocd_values.yml
 
 - name: Generate apps of app config.
   template:
     src: app_of_apps.yml.j2
     dest: /tmp/app_of_apps.yml
 - name: Install Argo CD Apps using Helm
-  shell: helm upgrade --install --create-namespace -n argocd argocd-apps argo/argocd-apps --values /tmp/app_of_apps.yml
+  shell: helm upgrade --install --create-namespace -n argocd argocd-apps argo/argocd-apps --version {{ argocd_apps_version }} --values /tmp/app_of_apps.yml
 
 #- name: Generate ingress manifest.
 #  template:

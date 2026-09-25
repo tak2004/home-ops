@@ -1,3 +1,7 @@
 ---
-argocd_domain: "argocd.intern"
+argocd_domain: "argocd.svc.home"
 app_repo: https://github.com/tak2004/home-ops-apps.git
+# Pinned: without --version helm installs whatever is newest, which turns every
+# playbook run into an unplanned Argo CD upgrade.
+argocd_version: 8.3.0
+argocd_apps_version: 2.0.2
