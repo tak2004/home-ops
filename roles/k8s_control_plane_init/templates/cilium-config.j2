@@ -20,6 +20,21 @@ gatewayAPI:
 hubble:
   ui:
     enabled: true
+    # Served through the shared cilium-ingress like argocd and headlamp, which
+    # the *.{{ k8s_subdomain }}.{{ dns_zone }} wildcard in bind9 resolves to.
+    # Without this the UI is a ClusterIP service and only reachable through
+    # kubectl port-forward.
+    ingress:
+      enabled: true
+      className: cilium
+      annotations:
+        cert-manager.io/cluster-issuer: home-ca
+      hosts:
+        - hubble.{{ k8s_subdomain }}.{{ dns_zone }}
+      tls:
+        - secretName: hubble-ui-tls
+          hosts:
+            - hubble.{{ k8s_subdomain }}.{{ dns_zone }}
   relay:
     enabled: true
 ingressController:
