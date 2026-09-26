@@ -89,6 +89,9 @@ netsvc:
     netsvc-2:
       ansible_host: 192.168.1.15
       replication_ip: 10.10.10.2
+      # Still on the loop-mounted FILE_THIN pool; netsvc-1 is already converted to
+      # thick LVM and must not get the image back.
+      linstor_file_pool: true
       # netplan matcht auf diese MACs statt auf den Namen, siehe templates/netplan.yml.j2
       nic_mac: "48:fd:8e:77:54:0f"
       replication_nic_mac: "48:fd:8e:77:54:10"

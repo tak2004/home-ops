@@ -2,3 +2,8 @@
 linstor_pool_size: 300G
 linstor_pool_image: /var/lib/linstor-pool.img
 linstor_pool_dir: /var/lib/linstor-pools/pool1
+
+# Off by default: a node gets the loop-mounted FILE_THIN image only while it has not
+# been converted to a thick LVM pool. The operator manages LVM itself, from the
+# device named in the LinstorSatelliteConfiguration.
+linstor_file_pool: false
