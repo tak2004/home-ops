@@ -29,6 +29,12 @@ hubble:
       className: cilium
       annotations:
         cert-manager.io/cluster-issuer: home-ca
+        # Picked up by the homepage dashboard, which reads ingresses itself.
+        gethomepage.dev/enabled: "true"
+        gethomepage.dev/name: "Hubble"
+        gethomepage.dev/group: "Cluster"
+        gethomepage.dev/icon: cilium.svg
+        gethomepage.dev/description: "Netzwerkfluesse im Cluster"
       hosts:
         - hubble.{{ k8s_subdomain }}.{{ dns_zone }}
       tls:

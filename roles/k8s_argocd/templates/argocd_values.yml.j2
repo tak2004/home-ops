@@ -17,6 +17,12 @@ server:
     annotations:
       # cert-manager issues the certificate from the private home-ca.
       cert-manager.io/cluster-issuer: home-ca
+      # Picked up by the homepage dashboard, which reads ingresses itself.
+      gethomepage.dev/enabled: "true"
+      gethomepage.dev/name: "Argo CD"
+      gethomepage.dev/group: "Cluster"
+      gethomepage.dev/icon: argo-cd.svg
+      gethomepage.dev/description: "GitOps, deployt alles hier"
     tls: true
 
 configs:
