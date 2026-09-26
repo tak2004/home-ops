@@ -2,9 +2,19 @@ network:
   version: 2
   renderer: networkd
   ethernets:
-    # Named interface instead of a match on "en*": the wildcard also matched the
-    # USB ethernet adapter on backbone-1, so both NICs ended up with one address.
+    # Matched on the MAC, not on the interface name. Disabling the onboard I210s in
+    # the BIOS frees their PCI buses, so the 10G card moves from bus 06 to bus 04 and
+    # comes up as enp4s0f0 -- a name this file would not configure, leaving the node
+    # unreachable. That happened once already. set-name pins the historical name, so
+    # the rename never reaches netplan's consumers: nic/replication_nic in the
+    # inventory, the interface LINSTOR has registered for DRBD replication, and the
+    # device Cilium picks up.
     {{ nic }}:
+{% if nic_mac is defined %}
+      match:
+        macaddress: "{{ nic_mac }}"
+      set-name: {{ nic }}
+{% endif %}
       optional: true
       addresses:
         - {{ static_ip }}/24
@@ -19,6 +29,11 @@ network:
     # Dedicated storage link, cabled point to point. No gateway and no nameserver:
     # nothing but DRBD replication is routed here.
     {{ replication_nic }}:
+{% if replication_nic_mac is defined %}
+      match:
+        macaddress: "{{ replication_nic_mac }}"
+      set-name: {{ replication_nic }}
+{% endif %}
       optional: true
       mtu: {{ replication_mtu }}
       addresses:

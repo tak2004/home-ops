@@ -61,10 +61,12 @@ backbone-2|192.168.1.11/24|Control-plane and k8s init node. Its certificates are
 backbone-1|192.168.1.12/24|All core service which always must be available and the control-plane of the k8s cluster.
 backbone-3|192.168.1.13/24|
 (pool)|192.168.1.20-29|Cilium LoadBalancerIPPool. Must stay clear of all node addresses.
-ups-1|192.168.3.8/24|Turning on/off power of connected devices. **Not migrated yet.**
-ups-2|192.168.3.9/24|**Not migrated yet.**
-netsvc-1|192.168.3.10/24|Data-plane node of the k8s cluster. It runs all services which are not critical like monitoring or a fileserver. **Not migrated yet.**
-netsvc-2|192.168.3.15/24|**Not migrated yet.**
+ups-1|192.168.3.8/24|Turning on/off power of connected devices. **Not migrated yet** -- and when it is, do NOT keep the last octet: 192.168.1.8 is the BMC of netsvc-1.
+ups-2|192.168.3.9/24|**Not migrated yet** -- same collision, 192.168.1.9 is the BMC of netsvc-2.
+netsvc-1|192.168.1.14/24|Data-plane node of the k8s cluster. It runs all services which are not critical like monitoring or a fileserver.
+netsvc-2|192.168.1.15/24|Second data-plane node. Carries the second LINSTOR replica.
+netsvc-1-bmc|192.168.1.8/24|BMC of netsvc-1. Dedicated management port (RJ-45 above the USB3 ports), NOT shared/NCSI -- the shared mode uses a different MAC and dies with the LAN1 cable.
+netsvc-2-bmc|192.168.1.9/24|BMC of netsvc-2. Same wiring as above.
 netsvc-3|192.168.3.20/24|
 netsvc-4|192.168.3.25/24|
 

@@ -138,3 +138,84 @@
     path: /etc/hosts
     line: '{{ virtual_ip }} {{ k8s_hostname }}'
     search_string: '{{ k8s_hostname }}'
+# lvm2 is a hard dependency, not a convenience: the LINSTOR satellite creates the
+# volume group and thin pool for pool2 on the host, and on a node without lvm2 that
+# pool simply never appears. ipmitool and smartmontools are the two tools this
+# cluster could not be debugged without -- ipmitool reconfigures the BMC in-band
+# over KCS when the network is gone and no BMC credentials are at hand, which is
+# exactly the situation a broken netplan produces.
+- name: Install the storage and out-of-band tooling
+  ansible.builtin.apt:
+    name:
+      - lvm2
+      - ipmitool
+      - smartmontools
+    state: present
+
+# journald defaults to 10% of the filesystem, which is ~45G here -- on the same
+# DRAM-less QLC NVMe that carries the LINSTOR pool. 3.9G had already accumulated,
+# and a node emitting PCIe errors fills it far faster than that. Logging must not
+# compete with storage for the drive's endurance.
+- name: Ensure the journald drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Cap the systemd journal size
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/size.conf
+    content: |
+      [Journal]
+      SystemMaxUse=500M
+    mode: '0644'
+  notify: Restart journald
+
+# The onboard I210 NICs are defective on part of the MJ11-EC1 batch: netsvc-1
+# emitted ~321 correctable PCIe Data-Link-Layer errors per second from their root
+# ports (4.3M since boot, 3.7G of journal) while both interfaces were down and had
+# never passed a single packet -- rx=0 tx=0. netsvc-2 has the same configuration
+# and stays silent, so it is per-board silicon, not configuration. Taking the two
+# endpoints off the bus drops the rate to zero; both cluster networks run on the
+# 10G card, so nothing depends on them. Writing to /sys does not survive a reboot,
+# hence the udev rule, which applies on the next boot.
+- name: Remove the defective onboard I210 NICs from the PCI bus
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/80-disable-onboard-i210.rules
+    content: |
+      ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x1533", ATTR{remove}="1"
+    mode: '0644'
+  when: disable_onboard_i210 | bool
+
+# bootstrap.yml renders this too, but only against the bootstrap group with the
+# installer's root password -- it never runs again once a node is live. The netplan
+# config has to be maintainable afterwards as well: the MAC match below is what keeps
+# the 10G card configured when the BIOS renumbers the PCI buses.
+- name: Update the netplan configuration
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/netplan.yml.j2"
+    dest: /etc/netplan/01-netcfg.yaml
+    mode: '0600'
+  notify: Generate netplan
+
+# The Debian installer leaves "iface {{ nic }} inet dhcp" in /etc/network/interfaces
+# and networking.service enabled. ifupdown then runs its own dhclient on the very NIC
+# netplan configures statically, and the node quietly carries a second, dynamic
+# address from the DHCP range -- 192.168.1.116 alongside the static .14 on netsvc-1.
+# Nothing errors, nothing in /etc/netplan hints at it. Same failure the NetworkManager
+# comment in bootstrap.yml describes, different culprit.
+- name: Stop ifupdown from running a second dhclient
+  ansible.builtin.systemd:
+    name: networking
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+  register: ifupdown_masked
+
+- name: Drop the leftover dhclient
+  ansible.builtin.shell: |
+    pkill -f "dhclient.*{{ nic }}" || true
+    ip addr show {{ nic }} | grep -q "dynamic" && ip addr flush dev {{ nic }} label "{{ nic }}" scope global || true
+  changed_when: false
+  when: ifupdown_masked is changed

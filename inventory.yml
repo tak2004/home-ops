@@ -76,13 +76,22 @@ netsvc:
     replication_mtu: 9000
     # Carries a storage pool. See the linstor_storage role.
     linstor_node: disk
+    # The onboard I210 NICs on this batch are defective: they flood correctable
+    # PCIe errors while down and unused. Both networks run on the 10G card.
+    disable_onboard_i210: true
   hosts:
     netsvc-1:
       ansible_host: 192.168.1.14
       replication_ip: 10.10.10.1
+      # netplan matcht auf diese MACs statt auf den Namen, siehe templates/netplan.yml.j2
+      nic_mac: "48:fd:8e:3c:1b:71"
+      replication_nic_mac: "48:fd:8e:3c:1b:72"
     netsvc-2:
       ansible_host: 192.168.1.15
       replication_ip: 10.10.10.2
+      # netplan matcht auf diese MACs statt auf den Namen, siehe templates/netplan.yml.j2
+      nic_mac: "48:fd:8e:77:54:0f"
+      replication_nic_mac: "48:fd:8e:77:54:10"
 bootstrap:
   vars:
     ansible_user: root

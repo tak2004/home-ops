@@ -1,0 +1,5 @@
+---
+# Off by default: the rule below removes every I210 it finds, so a node that
+# actually uses its onboard NIC would lose its network. Only enable where the
+# onboard ports are provably unused.
+disable_onboard_i210: false

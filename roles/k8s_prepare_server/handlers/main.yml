@@ -13,3 +13,21 @@
     state: restarted
     enabled: true
     daemon_reload: true
+
+- name: Restart journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: restarted
+
+# async/poll 0: netplan apply can briefly drop the link it is reconfiguring, and a
+# synchronous call would hang the SSH connection that triggered it.
+- name: Generate netplan
+  ansible.builtin.command: netplan generate
+  async: 45
+  poll: 0
+  notify: Apply netplan
+
+- name: Apply netplan
+  ansible.builtin.command: netplan apply
+  async: 45
+  poll: 0
