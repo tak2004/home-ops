@@ -40,6 +40,8 @@
 
 # async/poll 0: restarting the kubelet on the node that runs the control plane can
 # stall the connection Ansible is talking over, same reason as netplan above.
+  tags: [harden]
+
 - name: Restart kubelet
   ansible.builtin.systemd:
     name: kubelet
@@ -47,3 +49,4 @@
     daemon_reload: true
   async: 60
   poll: 0
+  tags: [harden]

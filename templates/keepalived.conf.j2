@@ -1,11 +1,24 @@
+# keepalived refuses to run any script when no script_user exists and script
+# security is off -- it logs "SECURITY VIOLATION" and carries on without the
+# check. Debian ships no keepalived_script user, so the user has to be named.
+global_defs {
+    enable_script_security
+    script_user root
+}
+
 # Without this check keepalived keeps the VIP even when the local apiserver is
 # dead -- VRRP only tracks whether the node is alive. That is how a single node
 # failure turned into a cluster-wide one: the VIP pointed at a node whose API no
 # longer answered, and no kubelet could reach k8scp any more.
+#
+# A separate file, not an inline "/bin/bash -c ...": under enable_script_security
+# keepalived inspects the first token as a path and refuses anything that is not a
+# plain executable -- "Wrong file type found in script path '/bin/bash'. Disabling
+# track script check_apiserver due to insecure".
 vrrp_script check_apiserver {
-    script "/bin/bash -c '</dev/tcp/127.0.0.1/6443'"
+    script "/usr/local/bin/keepalived-check-apiserver"
     interval 3
-    timeout 2
+    timeout 4
     fall 2
     rise 2
     # -50 drops the priority below that of a healthy BACKUP, which then takes over.
@@ -18,13 +31,23 @@ vrrp_instance backbone {
 {% endif %}
     interface {{ nic }}
     virtual_router_id 51
-    priority {{ 255 if inventory_hostname == k8s_init_node else 254 - ansible_play_hosts_all.index(inventory_hostname) }}
+    # NEVER 255: VRRP treats priority 255 as "this node owns the address", and
+    # keepalived then discards every weighted track_script on it -- logged as
+    # "ignoring tracked script check_apiserver with weights due to address_owner".
+    # That disabled the health check on exactly the node that holds the VIP, which
+    # is how a dead apiserver kept k8scp pointed at itself. 200 for the master and
+    # 190-n for the backups leaves room for the -50 penalty to decide a failover:
+    # an unhealthy master drops to 150, below every healthy backup.
+    priority {{ 200 if inventory_hostname == k8s_init_node else 190 - ansible_play_hosts_all.index(inventory_hostname) }}
     advert_int 1
-    unicast_src_ip {{ ansible_default_ipv4.address }}
+    # ansible_host, not ansible_default_ipv4: the latter only exists for hosts whose
+    # facts were gathered, so a --limit run to roll this out one node at a time failed
+    # with AnsibleUndefinedVariable on the peers it had never touched.
+    unicast_src_ip {{ ansible_host }}
     unicast_peer {
 {% for node in groups['backbone'] %}
 {% if node != inventory_hostname %}
-        {{ hostvars[node].ansible_default_ipv4.address }}
+        {{ hostvars[node].ansible_host }}
 {% endif %}
 {% endfor %}
     }

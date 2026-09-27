@@ -233,6 +233,7 @@
     state: directory
     mode: '0755'
 
+  tags: [harden]
 - name: Guarantee sshd memory and shield it from the OOM killer
   ansible.builtin.copy:
     dest: /etc/systemd/system/ssh.service.d/reserve.conf
@@ -250,12 +251,14 @@
 # merges these drop-ins over kubeadm's /var/lib/kubelet/config.yaml, so that file
 # stays untouched and an upgrade cannot revert the reservations. The drop-in
 # directory is beta in v1.33 and enabled by default; it goes GA in v1.35.
+  tags: [harden]
 - name: Ensure the kubelet drop-in directory exists
   ansible.builtin.file:
     path: /etc/kubernetes/kubelet.conf.d
     state: directory
     mode: '0755'
 
+  tags: [harden]
 - name: Reserve memory for the host so the kubelet evicts instead of dying
   ansible.builtin.copy:
     dest: /etc/kubernetes/kubelet.conf.d/20-reserved.conf
@@ -274,6 +277,7 @@
     mode: '0644'
   notify: Restart kubelet
 
+  tags: [harden]
 - name: Point the kubelet at its drop-in directory
   ansible.builtin.lineinfile:
     path: /etc/default/kubelet
@@ -282,3 +286,5 @@
     create: true
     mode: '0644'
   notify: Restart kubelet
+
+  tags: [harden]

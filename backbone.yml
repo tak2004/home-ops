@@ -7,6 +7,20 @@
     ansible.builtin.apt:
       package: 
        - keepalived
+  # A TCP connect to 6443 is not enough: when backbone-2 hung, its kernel still
+  # completed the handshake while the apiserver never answered, so a port check
+  # would have reported the node healthy and kept the VIP exactly where it was.
+  # Only a real response to /livez distinguishes "listening" from "working".
+  - name: Install the apiserver health check keepalived runs
+    ansible.builtin.copy:
+      dest: /usr/local/bin/keepalived-check-apiserver
+      mode: '0755'
+      content: |
+        #!/bin/bash
+        # Non-zero exit drops this node's VRRP priority by the configured weight.
+        code=$(curl -sk --max-time 3 -o /dev/null -w '%{http_code}' https://127.0.0.1:6443/livez)
+        [ "$code" = "200" ]
+
   - name: Configure keepalived.
     ansible.builtin.template:
       src: templates/keepalived.conf.j2
