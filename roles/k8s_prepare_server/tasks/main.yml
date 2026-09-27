@@ -219,3 +219,66 @@
     ip addr show {{ nic }} | grep -q "dynamic" && ip addr flush dev {{ nic }} label "{{ nic }}" scope global || true
   changed_when: false
   when: ifupdown_masked is changed
+
+# backbone-2 died with a live kernel and a dead userspace: it still answered the TCP
+# handshake on port 22, but sshd never got far enough to send a banner, so the node
+# was unreachable exactly when it had to be debugged. MemoryMin is a hard reclaim
+# barrier under cgroup v2 -- those pages are never evicted, no matter the pressure --
+# and the negative OOMScoreAdjust makes sshd the last thing the OOM killer considers.
+# 64M covers the listener plus a forked session with bash and sudo; on a 2G node that
+# is 3% spent on being able to get in at all.
+- name: Ensure the sshd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.service.d
+    state: directory
+    mode: '0755'
+
+- name: Guarantee sshd memory and shield it from the OOM killer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.service.d/reserve.conf
+    content: |
+      [Service]
+      MemoryMin=64M
+      OOMScoreAdjust=-900
+    mode: '0644'
+  notify: Reload sshd units
+
+# Without reservations the kubelet hands the node's entire memory to pods and lets
+# the host starve -- which is how the apiserver, etcd and sshd lost against workloads
+# on a 2G SBC. evictionHard makes the kubelet shed pods while there is still room to
+# act; systemReserved fences off what the host needs to keep running. The kubelet
+# merges these drop-ins over kubeadm's /var/lib/kubelet/config.yaml, so that file
+# stays untouched and an upgrade cannot revert the reservations. The drop-in
+# directory is beta in v1.33 and enabled by default; it goes GA in v1.35.
+- name: Ensure the kubelet drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/kubernetes/kubelet.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Reserve memory for the host so the kubelet evicts instead of dying
+  ansible.builtin.copy:
+    dest: /etc/kubernetes/kubelet.conf.d/20-reserved.conf
+    content: |
+      apiVersion: kubelet.config.k8s.io/v1beta1
+      kind: KubeletConfiguration
+      systemReserved:
+        cpu: "{{ kubelet_system_reserved_cpu }}"
+        memory: "{{ kubelet_system_reserved_memory }}"
+      kubeReserved:
+        cpu: "{{ kubelet_kube_reserved_cpu }}"
+        memory: "{{ kubelet_kube_reserved_memory }}"
+      evictionHard:
+        memory.available: "{{ kubelet_eviction_memory }}"
+        nodefs.available: "10%"
+    mode: '0644'
+  notify: Restart kubelet
+
+- name: Point the kubelet at its drop-in directory
+  ansible.builtin.lineinfile:
+    path: /etc/default/kubelet
+    regexp: '^KUBELET_EXTRA_ARGS='
+    line: 'KUBELET_EXTRA_ARGS=--config-dir=/etc/kubernetes/kubelet.conf.d'
+    create: true
+    mode: '0644'
+  notify: Restart kubelet

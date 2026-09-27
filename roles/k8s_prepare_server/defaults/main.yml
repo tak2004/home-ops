@@ -3,3 +3,11 @@
 # actually uses its onboard NIC would lose its network. Only enable where the
 # onboard ports are provably unused.
 disable_onboard_i210: false
+
+# The backbone SBCs have 2G; netsvc has far more but the same reservations do no harm
+# there. Raise per group in inventory.yml if a node needs a different split.
+kubelet_system_reserved_cpu: 100m
+kubelet_system_reserved_memory: 256Mi
+kubelet_kube_reserved_cpu: 100m
+kubelet_kube_reserved_memory: 192Mi
+kubelet_eviction_memory: 200Mi
