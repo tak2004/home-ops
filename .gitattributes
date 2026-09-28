@@ -1,0 +1,3 @@
+# Certificates are embedded verbatim into rendered config (oidc.config.rootCA).
+# A CRLF checkout would put carriage returns inside the PEM block.
+*.crt -text
