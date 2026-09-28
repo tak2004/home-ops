@@ -1,7 +1,12 @@
 ---
 - name: Prepare kubernetes nodes
-  hosts:
-  - backbone-2
+  # The backbone group, not a named node. This was pinned to backbone-2, and when
+  # that node died the play could not run at all -- even though the work is a helm
+  # release against the cluster and any reachable control-plane node will do.
+  hosts: backbone
   become: yes
   roles:
-  - k8s_argocd
+  - role: k8s_argocd
+    # Once, not once per node: three parallel helm upgrades of the same release
+    # would race each other.
+    run_once: true
