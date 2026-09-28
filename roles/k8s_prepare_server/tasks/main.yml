@@ -191,12 +191,29 @@
 # installer's root password -- it never runs again once a node is live. The netplan
 # config has to be maintainable afterwards as well: the MAC match below is what keeps
 # the 10G card configured when the BIOS renumbers the PCI buses.
+# Armbian ships /etc/netplan/10-dhcp-all-interfaces.yaml, which matches e* -- the
+# same interface 01-netcfg.yaml configures by name. systemd-networkd applies the
+# first matching .network file in lexical order, and "all-eth" sorts before the
+# interface-specific one, so the catch-all wins: backbone-3 took its address from
+# DHCP while the repo believed it was static, and every setting in 01-netcfg.yaml --
+# the resolver, accept-ra -- was written to a file nothing read. Same class of
+# failure as the ifupdown dhclient below, different source.
+- name: Remove the vendor netplan configuration that outranks ours
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/netplan/10-dhcp-all-interfaces.yaml
+  notify: Generate netplan
+  tags: [netplan]
+
 - name: Update the netplan configuration
   ansible.builtin.template:
     src: "{{ playbook_dir }}/templates/netplan.yml.j2"
     dest: /etc/netplan/01-netcfg.yaml
     mode: '0600'
   notify: Generate netplan
+  tags: [netplan]
 
 # The Debian installer leaves "iface {{ nic }} inet dhcp" in /etc/network/interfaces
 # and networking.service enabled. ifupdown then runs its own dhclient on the very NIC

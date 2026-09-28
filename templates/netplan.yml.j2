@@ -16,6 +16,11 @@ network:
       set-name: {{ nic }}
 {% endif %}
       optional: true
+      # The router advertises itself as an IPv6 resolver, and systemd-resolved then
+      # prefers it over the static entry below -- it answers, with NXDOMAIN for the
+      # internal zone, and sticks. Nothing here speaks IPv6: every address, the DRBD
+      # link and Cilium are IPv4, so the advertisements are pure interference.
+      accept-ra: false
       addresses:
         - {{ static_ip }}/24
       routes:
@@ -23,8 +28,9 @@ network:
           via: {{ gateway_ip }}
       nameservers:
         addresses:
-          - 8.8.8.8
-          - 8.8.4.4
+{% for ns in dns_servers %}
+          - {{ ns }}
+{% endfor %}
 {% if replication_ip is defined %}
     # Dedicated storage link, cabled point to point. No gateway and no nameserver:
     # nothing but DRBD replication is routed here.

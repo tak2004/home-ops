@@ -26,11 +26,13 @@
   async: 45
   poll: 0
   notify: Apply netplan
+  tags: [netplan]
 
 - name: Apply netplan
   ansible.builtin.command: netplan apply
   async: 45
   poll: 0
+  tags: [netplan]
 
 - name: Reload sshd units
   ansible.builtin.systemd:

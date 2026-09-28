@@ -10,6 +10,24 @@ all:
     # k8s_prepare_server also runs on netsvc.
     virtual_ip: 192.168.1.10
     virtual_mask: 24
+    # The cluster resolves its own zone. Before this the nodes asked 8.8.8.8, which
+    # naturally knows nothing about svc.home -- and CoreDNS inherits the node
+    # resolvers through "forward . /etc/resolv.conf", so no pod could resolve a
+    # svc.home name either. Grafana could redirect a browser to Authelia and then
+    # failed the server-to-server token exchange with NXDOMAIN.
+    #
+    # The VIP alone, deliberately. bind9 listens on every address, so whichever
+    # backbone currently holds the VIP answers, and it forwards everything outside
+    # the zone to the router itself -- nothing is lost by not listing the router.
+    #
+    # Listing the router as a fallback actively breaks this: systemd-resolved sticks
+    # to whichever server last answered, an NXDOMAIN for svc.home counts as an
+    # answer, and the node then resolves the zone nowhere. Measured, not feared.
+    #
+    # The cost is that a node installed before backbone.yml has ever run has no
+    # resolver at all. Point it at the router by hand for that one bootstrap.
+    dns_servers:
+      - "{{ virtual_ip }}"
     # The SBCs boot from SD card while root lives on a USB-SATA bridge. Both bridges
     # in use implement UAS incorrectly: under load commands abort
     # (uas_eh_abort_handler, cmd_age=30s), the ext4 journal aborts and errors=remount-ro
@@ -32,7 +50,12 @@ all:
     # them listen, but only the node holding the VIP answers -- that way the Fritzbox
     # needs just one nameserver address, and DNS survives a node failure.
     dns_zone: home
-    dns_allow_query: "192.168.1.0/24"
+    # The pod network belongs in here as well as the LAN. CoreDNS forwards to this
+    # server on behalf of every pod, and those queries arrive from 10.0.0.0/8 -- with
+    # only the LAN allowed, bind9 answers REFUSED and no pod can resolve the zone.
+    dns_allow_query:
+      - "192.168.1.0/24"
+      - "10.0.0.0/8"
     # Everything under this subdomain is delegated to the cluster ingress via a
     # wildcard record, so a new Ingress needs no DNS change at all -- only a host
     # rule like dashboard.svc.home. ingress_ip is the LoadBalancer address of

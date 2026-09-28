@@ -4,12 +4,12 @@ options {
   // Listening everywhere means whichever node currently holds the VIP answers,
   // without needing a restart when it moves.
   listen-on port 53 { any; };
-  allow-query { {{ dns_allow_query }}; };
+  allow-query { {% for n in dns_allow_query %}{{ n }}; {% endfor %}};
 
   // Authoritative for the internal zone, forwarding everything else to the router,
   // so clients only need this one resolver.
   recursion yes;
-  allow-recursion { {{ dns_allow_query }}; };
+  allow-recursion { {% for n in dns_allow_query %}{{ n }}; {% endfor %}};
   forwarders { {{ gateway_ip }}; };
   forward only;
 
