@@ -305,3 +305,39 @@
   notify: Restart kubelet
 
   tags: [harden]
+# These two live in bootstrap.yml as well, which by its own account never runs again
+# once a node is live. That is the wrong place for them to live only: backbone-2 and
+# backbone-3 both failed with a reachable kernel and an unresponsive userspace, which
+# is what a read-only root looks like, and an Armbian update that rewrites
+# armbianEnv.txt would silently take the quirk with it. Enforced here, they are
+# checked on every run.
+#
+# Note that a change only takes effect on the next boot -- this cannot rescue a node
+# whose filesystem has already gone read-only.
+- name: Check for Armbian boot configuration
+  ansible.builtin.stat:
+    path: /boot/armbianEnv.txt
+  register: armbian_env
+  tags: [usbquirk]
+
+# The USB-SATA bridges carrying root implement UAS incorrectly: under load commands
+# abort (uas_eh_abort_handler, cmd_age=30s), the ext4 journal aborts, and
+# errors=remount-ro turns / read-only. The node then fails without the disk being
+# faulty. A quirk for a bridge that is not present has no effect.
+- name: Disable UAS for the USB-SATA bridges
+  ansible.builtin.lineinfile:
+    path: /boot/armbianEnv.txt
+    regexp: '^usbstoragequirks='
+    line: 'usbstoragequirks={{ usb_storage_quirks }}'
+  when: armbian_env.stat.exists
+  tags: [usbquirk]
+
+# Otherwise the SBCs stall during boot on a damaged filesystem and the disk has to be
+# repaired by hand on another machine.
+- name: Repair the root filesystem automatically on boot
+  ansible.builtin.lineinfile:
+    path: /boot/armbianEnv.txt
+    regexp: '^extraargs='
+    line: 'extraargs={{ armbian_extraargs }}'
+  when: armbian_env.stat.exists
+  tags: [usbquirk]
