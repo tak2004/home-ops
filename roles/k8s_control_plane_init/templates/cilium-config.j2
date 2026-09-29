@@ -45,6 +45,12 @@ hubble:
     enabled: true
 ingressController:
   enabled: true
+  # There is no default IngressClass in this cluster otherwise: the cilium class
+  # exists but carries no is-default-class annotation, so an Ingress created without
+  # ingressClassName is served by nobody -- silently, with no event and no error.
+  # Every Ingress in these repositories names the class explicitly, so nothing is
+  # broken today; this closes the trap rather than fixing a fault.
+  default: true
   # Note the spelling: Cilium reads "loadbalancerMode" (lowercase b). The previous
   # "loadBalancerMode" was silently ignored by Helm.
   # shared: every ingress is served by the single cilium-ingress LoadBalancer, which

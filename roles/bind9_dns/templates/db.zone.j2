@@ -20,6 +20,17 @@ ns      IN      A       {{ virtual_ip }}
 *.{{ k8s_subdomain }}   IN      A       {{ ingress_ip }}
 {{ k8s_subdomain }}     IN      A       {{ ingress_ip }}
 
+{% if knative_subdomain is defined %}
+; Knative builds one hostname per service as {name}-{namespace}.<subdomain>.zone, so
+; it needs a wildcard of its own. Not the shared ingress address: Knative routes by
+; Host header itself, through Kourier's own LoadBalancer.
+; The namespace is folded into the first label on purpose -- DNS wildcards match
+; exactly one, so the upstream default {name}.{namespace}.<domain> would resolve
+; nowhere. See config-network in resources/knative.yaml.
+*.{{ knative_subdomain }}	IN	A	{{ knative_ip }}
+{{ knative_subdomain }}	IN	A	{{ knative_ip }}
+{% endif %}
+
 {% for name, ip in dns_records.items() %}
 ; Services reached directly via their own LoadBalancer IP, bypassing the ingress.
 {{ "%-12s"|format(name) }}IN      A       {{ ip }}
