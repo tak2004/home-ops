@@ -16,18 +16,28 @@ all:
     # svc.home name either. Grafana could redirect a browser to Authelia and then
     # failed the server-to-server token exchange with NXDOMAIN.
     #
-    # The VIP alone, deliberately. bind9 listens on every address, so whichever
-    # backbone currently holds the VIP answers, and it forwards everything outside
-    # the zone to the router itself -- nothing is lost by not listing the router.
-    #
     # Listing the router as a fallback actively breaks this: systemd-resolved sticks
     # to whichever server last answered, an NXDOMAIN for svc.home counts as an
     # answer, and the node then resolves the zone nowhere. Measured, not feared.
     #
     # The cost is that a node installed before backbone.yml has ever run has no
     # resolver at all. Point it at the router by hand for that one bootstrap.
+    #
+    # Deliberately the node addresses, not the VIP. A node that wedges with a live
+    # kernel and dead userspace keeps the VIP on its interface -- keepalived can only
+    # hand the address back while it is running, and the kernel keeps answering ARP for
+    # it. Every resolver that then learns that MAC drops its queries into a black hole
+    # until it times out. Measured on backbone-2: 30% ICMP and 50% DNS loss on the VIP,
+    # while the same host was loss-free on its own address.
+    #
+    # Listing the three backbones instead is safe precisely where the router was not:
+    # all three are authoritative for the zone, so whichever one answers gives the same
+    # result and systemd-resolved sticking to it costs nothing. A wedged node now costs
+    # one resolver out of three instead of poisoning the shared address.
     dns_servers:
-      - "{{ virtual_ip }}"
+      - 192.168.1.12
+      - 192.168.1.13
+      - 192.168.1.11
     # The SBCs boot from SD card while root lives on a USB-SATA bridge. Both bridges
     # in use implement UAS incorrectly: under load commands abort
     # (uas_eh_abort_handler, cmd_age=30s), the ext4 journal aborts and errors=remount-ro
