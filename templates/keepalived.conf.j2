@@ -17,12 +17,37 @@ global_defs {
 # track script check_apiserver due to insecure".
 vrrp_script check_apiserver {
     script "/usr/local/bin/keepalived-check-apiserver"
-    interval 3
-    timeout 4
+    # interval has to exceed the script's own worst case (curl --max-time 2), or
+    # keepalived starts the next run before the last one finished and logs
+    # "Track script check_apiserver is already running, expect idle - skipping run"
+    # continuously -- the priority then stops being re-evaluated at all. Seen with
+    # interval 3 against a 3 s curl timeout, where the check ran permanently.
+    interval 5
+    timeout 3
     fall 2
     rise 2
     # -50 drops the priority below that of a healthy BACKUP, which then takes over.
     weight -50
+}
+
+# check_apiserver cannot tell "my apiserver is down because the cluster is down"
+# from "nobody can reach me". Both look identical from 127.0.0.1, and in the first
+# case every node fails together, so no failover happens. A node that cannot even
+# reach the gateway must never hold the VIP, whatever its apiserver says.
+#
+# -80 is chosen to dominate: the worst case from everything else is the -50
+# apiserver penalty plus the 20-point spread between backups. A node that fails
+# this check therefore always loses the address to one that passes it -- the
+# tightest pairing is an only-LAN-dead backbone-1 at 110 against an
+# only-apiserver-dead backbone-3 at 120. The lowest value any node can reach is
+# backbone-3 with both checks failing, 170-130 = 40, still safely above zero.
+vrrp_script check_lan {
+    script "/usr/local/bin/keepalived-check-lan"
+    interval 5
+    timeout 3
+    fall 2
+    rise 2
+    weight -80
 }
 
 vrrp_instance backbone {
@@ -38,7 +63,20 @@ vrrp_instance backbone {
     # is how a dead apiserver kept k8scp pointed at itself. 200 for the master and
     # 190-n for the backups leaves room for the -50 penalty to decide a failover:
     # an unhealthy master drops to 150, below every healthy backup.
-    priority {{ 200 if inventory_hostname == k8s_init_node else 190 - ansible_play_hosts_all.index(inventory_hostname) }}
+    #
+    # groups['backbone'], NOT ansible_play_hosts_all: the latter holds only the hosts
+    # of the CURRENT play, so a --limit run to roll this out one node at a time makes
+    # it a single-element list, every backup computes index 0, and they all end up on
+    # the same 190. VRRP does not preempt on equal priority, so on 2026-10-04 the VIP
+    # stayed on backbone-1 -- unreachable, but the incumbent. The inventory group does
+    # not change with --limit, which is the whole point. 10 points per position keeps
+    # the backups apart by more than any rounding and less than the -80 LAN penalty.
+    #
+    # keepalived_priority overrides the computed value per host. Needed whenever one
+    # node cannot be reached by the playbook: the others would get new numbers while
+    # it keeps its old one, and inventory order alone could leave the unreachable node
+    # on top. Set it in the inventory, not here.
+    priority {{ keepalived_priority | default(200 if inventory_hostname == k8s_init_node else 190 - 10 * groups['backbone'].index(inventory_hostname)) }}
     advert_int 1
     # ansible_host, not ansible_default_ipv4: the latter only exists for hosts whose
     # facts were gathered, so a --limit run to roll this out one node at a time failed
@@ -60,5 +98,6 @@ vrrp_instance backbone {
     }
     track_script {
         check_apiserver
+        check_lan
     }
 }

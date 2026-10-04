@@ -102,6 +102,13 @@ backbone:
     backbone-3:
       ansible_host: 192.168.1.13
       nic: end1
+      # TEMPORARY, remove once backbone-1 has run backbone.yml again.
+      # The computed value would be 170, below the 190 backbone-1 still carries from
+      # the old template -- backbone-1 was unreachable on 2026-10-04 (0/3 SSH, ~97 %
+      # packet loss) and could not be rolled out. Leaving it at 170 would hand the VIP
+      # back to exactly that node the next time backbone-2 drops. 195 keeps backbone-3
+      # above backbone-1 without displacing the 200 of the master.
+      keepalived_priority: 195
 netsvc:
   vars:
     nic: enp6s0f0

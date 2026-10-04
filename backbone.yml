@@ -18,8 +18,33 @@
       content: |
         #!/bin/bash
         # Non-zero exit drops this node's VRRP priority by the configured weight.
-        code=$(curl -sk --max-time 3 -o /dev/null -w '%{http_code}' https://127.0.0.1:6443/livez)
+        # --max-time must stay below the interval in keepalived.conf, see there.
+        code=$(curl -sk --max-time 2 -o /dev/null -w '%{http_code}' https://127.0.0.1:6443/livez)
         [ "$code" = "200" ]
+
+  # check_apiserver only proves that the LOCAL apiserver answers. When etcd loses
+  # quorum that check fails on every node at once, all of them lose the same 50
+  # points, the relative order is unchanged -- and the VIP simply stays wherever it
+  # happens to sit. On 2026-10-04 that was backbone-1 while it was dropping ~97% of
+  # its packets: the VIP pointed at the one node nothing could reach, and the whole
+  # .home zone went with it, because the Fritzbox knows only the VIP as nameserver.
+  #
+  # TCP, not ping: ICMP is rate-limited by the kernel and dropped outright by some
+  # hosts here, so an echo-based check reports outages that do not exist. Measured
+  # the same day: 0/20 pings against a host that answered 4/5 TCP connects.
+  # Port 80 is a second chance on purpose -- a check that can only ever fail would
+  # demote every node by the same amount and decide nothing at all.
+  - name: Install the LAN reachability check keepalived runs
+    ansible.builtin.copy:
+      dest: /usr/local/bin/keepalived-check-lan
+      mode: '0755'
+      content: |
+        #!/bin/bash
+        # Non-zero exit drops this node's VRRP priority by the configured weight.
+        for port in 53 80; do
+          timeout 2 bash -c "exec 3<>/dev/tcp/{{ gateway_ip }}/$port" 2>/dev/null && exit 0
+        done
+        exit 1
 
   - name: Configure keepalived.
     ansible.builtin.template:
