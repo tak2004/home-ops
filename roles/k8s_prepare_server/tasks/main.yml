@@ -60,10 +60,25 @@
     update_cache: yes
   tags: containerd
 
+# "creates: /etc/containerd/config.toml" was wrong: Debian's containerd package ships
+# a 255-byte stub at that path, so the guard always fired and the real configuration
+# was never generated. The two replace tasks below then matched nothing -- and
+# ansible.builtin.replace does not fail when its regexp matches nothing, so this was
+# completely silent. The node ended up with containerd on cgroupfs while kubelet used
+# systemd, which on backbone-4 killed every static pod a few seconds after start:
+# etcd and kube-apiserver both logged a clean shutdown with no error of their own.
+# Key on the content instead -- the stub has no SystemdCgroup line, the generated
+# configuration does.
+- name: Check whether the containerd configuration is the generated one
+  ansible.builtin.command: grep -q SystemdCgroup /etc/containerd/config.toml
+  register: containerd_config_generated
+  changed_when: false
+  failed_when: false
+  tags: containerd
+
 - name: Generate the containerd configuration
   ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
-  args:
-    creates: /etc/containerd/config.toml
+  when: containerd_config_generated.rc != 0
   notify: Restart containerd
   tags: containerd
 
@@ -88,6 +103,15 @@
     regexp: '^(\s*bin_dir\s*=\s*)".*"$'
     replace: '\1"/opt/cni/bin"'
   notify: Restart containerd
+  tags: containerd
+
+# Both edits above are silent no-ops when their pattern is absent. That is exactly how
+# the cgroup mismatch stayed hidden, so verify the result instead of trusting it.
+- name: Verify the containerd configuration actually took
+  ansible.builtin.shell: |
+    grep -q 'SystemdCgroup = true' /etc/containerd/config.toml &&
+    grep -q 'bin_dir = "/opt/cni/bin"' /etc/containerd/config.toml
+  changed_when: false
   tags: containerd
 
 - name: Add kubernetes repo key.
