@@ -79,6 +79,24 @@
       - nm_masked_bootstrap is failed
       - '"Could not find the requested service" not in (nm_masked_bootstrap.msg | default(""))'
 
+  # The Debian installer leaves "iface <nic> inet dhcp" in /etc/network/interfaces and
+  # networking.service enabled, so ifupdown runs a dhclient on the very NIC netplan is
+  # about to configure statically. Masked here and not only in k8s_prepare_server,
+  # because between bootstrap and the first k8s.yml run the node would otherwise sit
+  # there with two configurators -- exactly the state that cost backbone-1 a day.
+  # Observed on backbone-4 right after bootstrapping it on 2026-10-05: networking
+  # enabled, one dhclient running.
+  - name: Disable ifupdown in favour of systemd-networkd
+    ansible.builtin.systemd:
+      name: networking
+      state: stopped
+      enabled: false
+      masked: true
+    register: ifupdown_masked_bootstrap
+    failed_when:
+      - ifupdown_masked_bootstrap is failed
+      - '"Could not find the requested service" not in (ifupdown_masked_bootstrap.msg | default(""))'
+
   - name: Update Netplan Configuration
     template:
       src: templates/netplan.yml.j2

@@ -118,6 +118,22 @@ backbone:
     backbone-3:
       ansible_host: 192.168.1.13
       nic: end1
+    # Dell Wyse 5070, same model as backbone-1, 8 GB against the SBCs' 2. They replace
+    # backbone-2 and -3, which freeze under etcd load because their root medium does
+    # roughly 300 IOPS -- on 2026-10-05 that took the whole control plane down for
+    # hours. Deliberately new names and new addresses instead of taking over .11/.13:
+    # that way both generations can run side by side and the cluster never drops below
+    # quorum during the swap. .11 and .13 fall free afterwards, leaving a gap in the
+    # block, which is the cheaper price.
+    # MACs are Dell vendor MACs and therefore stable -- see the nic_mac note above.
+    backbone-4:
+      ansible_host: 192.168.1.16
+      nic: enp1s0
+      nic_mac: "a4:bb:6d:23:e8:b5"
+    backbone-5:
+      ansible_host: 192.168.1.17
+      nic: enp1s0
+      nic_mac: "6c:2b:59:54:57:1c"
 netsvc:
   vars:
     nic: enp6s0f0
@@ -165,6 +181,17 @@ bootstrap:
       static_ip: 192.168.1.14
     netsvc-2:
       static_ip: 192.168.1.15
+    # Until bootstrap.yml has run these two still sit on their DHCP leases -- .117
+    # becomes backbone-4 and .110 becomes backbone-5. Do NOT set ansible_host here to
+    # reach them: it is already set in the backbone group, and the same host variable
+    # in two places makes precedence a guessing game. Pass the current address on the
+    # command line instead, where it unambiguously wins:
+    #   ansible-playbook -i inventory.yml bootstrap.yml --limit backbone-4 \
+    #     -e ansible_host=192.168.1.117
+    backbone-4:
+      static_ip: 192.168.1.16
+    backbone-5:
+      static_ip: 192.168.1.17
 #    netsvc-3:
 #      static_ip: 192.168.3.20
 #    netsvc-4:
