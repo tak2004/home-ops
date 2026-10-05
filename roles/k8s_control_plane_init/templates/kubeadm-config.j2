@@ -2,3 +2,17 @@ apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 kubernetesVersion: {{ k8s_cp_version }}
 controlPlaneEndpoint: "{{ k8s_hostname }}:6443"
+# kubeadm sets no auto-compaction, so etcd keeps every revision forever. In this
+# cluster the database had grown to 144 MB by 2026-10-05 and took the control plane
+# down: on the 300-IOPS SBCs etcd then answered too slowly for the apiserver's startup
+# reads, which died with "cannot create cluster IP allocator: etcdserver: request
+# timed out" -- 436 restarts on backbone-3, 951 on backbone-2. A manual compact plus
+# defrag brought it to 45 MB and the apiserver came up on the next attempt. The slow
+# disks made it fatal here, but the unbounded growth itself is the defect.
+etcd:
+  local:
+    extraArgs:
+      - name: auto-compaction-mode
+        value: periodic
+      - name: auto-compaction-retention
+        value: 8h
