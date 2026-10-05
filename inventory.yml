@@ -43,10 +43,16 @@ all:
     # all three are authoritative for the zone, so whichever one answers gives the same
     # result and systemd-resolved sticking to it costs nothing. A wedged node now costs
     # one resolver out of three instead of poisoning the shared address.
+    #
+    # Nachgezogen am 2026-10-05: .11 und .13 waren backbone-2 und -3, beide
+    # ausgemustert. Jetzt die drei verbliebenen Backbones, die alle bind9 fuer die
+    # Zone fahren. backbone-1 steht bewusst vorn, obwohl es derzeit NotReady ist --
+    # systemd-resolved probiert der Reihe nach und faellt auf die naechsten zurueck,
+    # und der Node soll zurueckkommen.
     dns_servers:
       - 192.168.1.12
-      - 192.168.1.13
-      - 192.168.1.11
+      - 192.168.1.16
+      - 192.168.1.17
     # The SBCs boot from SD card while root lives on a USB-SATA bridge. Both bridges
     # in use implement UAS incorrectly: under load commands abort
     # (uas_eh_abort_handler, cmd_age=30s), the ext4 journal aborts and errors=remount-ro
@@ -112,12 +118,13 @@ backbone:
       linstor_node: tiebreaker
       # The only control-plane node with enough memory to also take workloads.
       k8s_schedulable: true
-    backbone-2:
-      ansible_host: 192.168.1.11
-      nic: end1
-    backbone-3:
-      ansible_host: 192.168.1.13
-      nic: end1
+    # backbone-2 (192.168.1.11) und backbone-3 (192.168.1.13) sind am 2026-10-05 aus
+    # dem Cluster genommen worden -- die ARM-SBCs schaffen rund 300 IOPS und haben etcd
+    # nicht mehr getragen. Sie stehen noch mit ihren Adressen im Netz, kubelet und
+    # keepalived sind deaktiviert, die Node-Objekte geloescht, die etcd-Member entfernt.
+    # Bewusst aus der backbone-Gruppe heraus: sonst wuerde backbone.yml ihnen wieder
+    # keepalived und bind9 installieren und sie wuerden um die VIP mitbieten.
+    # Ihre Adressen .11 und .13 sind damit frei.
     # Dell Wyse 5070, same model as backbone-1, 8 GB against the SBCs' 2. They replace
     # backbone-2 and -3, which freeze under etcd load because their root medium does
     # roughly 300 IOPS -- on 2026-10-05 that took the whole control plane down for
@@ -173,10 +180,15 @@ bootstrap:
   hosts:
     backbone-1:
       static_ip: 192.168.1.12
-    backbone-2:
-      static_ip: 192.168.1.11
-    backbone-3:
-      static_ip: 192.168.1.13
+    # backbone-2 und backbone-3 sind ausser Dienst, siehe Kommentar in der
+    # backbone-Gruppe. Eintraege bleiben stehen, damit die beiden SBCs ohne Raten
+    # wieder aufgesetzt werden koennen, falls sie als Worker zurueckkommen sollen --
+    # dann aber unter neuen Namen, die Namen backbone-2 und -3 sind vergeben gewesen
+    # und die Adressen .11 und .13 sind jetzt frei.
+    #backbone-2:
+    #  static_ip: 192.168.1.11
+    #backbone-3:
+    #  static_ip: 192.168.1.13
     netsvc-1:
       static_ip: 192.168.1.14
     netsvc-2:
