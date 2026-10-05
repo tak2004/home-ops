@@ -35,10 +35,14 @@
 # produced an empty token, and "kubeadm join --token  k8scp:6443" then swallowed the
 # endpoint as the token value. This only ever worked on nodes that still carried an
 # admin.conf from an earlier life; a genuinely fresh control-plane node could not join.
+# No --skip-phases here: addon/kube-proxy is a phase of "kubeadm init", not of
+# "kubeadm join", which fails outright with "invalid phase name: addon/kube-proxy".
+# The flag was copied over from the init role, where it belongs. A joining node does
+# not deploy the addon anyway -- that happened once, cluster-wide, at init time.
 - name: Join the cluster.
   shell: |
     export KUBECONFIG=~/.kube/config
-    kubeadm join --token $( kubeadm token create --kubeconfig ~/.kube/config ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane --skip-phases=addon/kube-proxy
+    kubeadm join --token $( kubeadm token create --kubeconfig ~/.kube/config ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane
   args:
     creates: /etc/kubernetes/kubelet.conf
 # Control-plane nodes carry a NoSchedule taint. backbone-1 has 8 GB and acts as the
