@@ -62,13 +62,22 @@
   # was the router's old DHCP reservation for this MAC: the node gave itself the IP of
   # backbone-2, routed every packet for that peer to its own loopback, and etcd lost
   # quorum after each reboot.
+  #
+  # Needed here because bootstrap runs before k8s.yml ever touches the node, but the
+  # same masking now also runs on every k8s_prepare_server pass -- once at provisioning
+  # was not enough. On backbone-1 the sibling case (ifupdown) was found unmasked on
+  # 2026-10-05 and cost the node 95 % of its inbound packets.
   - name: Disable NetworkManager in favour of systemd-networkd
     ansible.builtin.systemd:
       name: NetworkManager
       state: stopped
       enabled: false
       masked: true
-    failed_when: false
+    register: nm_masked_bootstrap
+    # Not installed is fine; a real masking failure must not pass unnoticed.
+    failed_when:
+      - nm_masked_bootstrap is failed
+      - '"Could not find the requested service" not in (nm_masked_bootstrap.msg | default(""))'
 
   - name: Update Netplan Configuration
     template:
@@ -130,15 +139,21 @@
     notify: restart ssh
 
   handlers:
-  - name: Apply Netplan Changes
-    command: netplan apply
-    async: 45
-    poll: 0
+  # Order matters and is not alphabetical: Ansible runs handlers in the order they are
+  # DEFINED, not in notification order. With "Apply" defined first, the "Generate"
+  # handler notified a handler that had already been passed over, so netplan apply
+  # never ran in that flush -- the static address only took effect after a reboot, and
+  # until then the node sat on whatever DHCP had given it. Same order as
+  # roles/k8s_prepare_server/handlers/main.yml, which had it right all along.
   - name: Generate Netplan
     command: netplan generate
     async: 45
     poll: 0
     notify: Apply Netplan Changes
+  - name: Apply Netplan Changes
+    command: netplan apply
+    async: 45
+    poll: 0
     
   - name: restart ssh
     service:

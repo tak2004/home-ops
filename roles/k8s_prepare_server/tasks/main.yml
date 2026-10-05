@@ -221,21 +221,53 @@
 # address from the DHCP range -- 192.168.1.116 alongside the static .14 on netsvc-1.
 # Nothing errors, nothing in /etc/netplan hints at it. Same failure the NetworkManager
 # comment in bootstrap.yml describes, different culprit.
+#
+# Measured on backbone-1, 2026-10-05: networking.service was "enabled" here, not
+# masked, and the node lost 95-100 % of every inbound packet for hours -- over both
+# IPv4 and IPv6, over the onboard NIC and over a USB dongle alike. enp1s0 carried
+# 192.168.1.12 (netplan) and 192.168.1.76 (dhclient) at the same time while the two
+# daemons reconfigured it in turn. Stopping networking.service and re-applying netplan
+# took it from 95 % loss to 50/50 pings in one step. The hardware was never at fault.
 - name: Stop ifupdown from running a second dhclient
   ansible.builtin.systemd:
     name: networking
     state: stopped
     enabled: false
     masked: true
-  failed_when: false
   register: ifupdown_masked
+  # A node without ifupdown installed is fine and must not fail the play. Anything
+  # else has to surface: this used to be "failed_when: false", which hid exactly the
+  # case above -- a masking that silently never happened.
+  failed_when:
+    - ifupdown_masked is failed
+    - '"Could not find the requested service" not in (ifupdown_masked.msg | default(""))'
 
+# Only in bootstrap.yml until 2026-10-05, so it was applied once at provisioning and
+# never again. A NetworkManager that gets reinstalled or unmasked later -- by an
+# upgrade, a dependency, a stray systemctl -- brings its own dhclient back and
+# recreates the failure described above. Enforced on every run now, same as ifupdown.
+- name: Stop NetworkManager from running a second dhclient
+  ansible.builtin.systemd:
+    name: NetworkManager
+    state: stopped
+    enabled: false
+    masked: true
+  register: nm_masked
+  failed_when:
+    - nm_masked is failed
+    - '"Could not find the requested service" not in (nm_masked.msg | default(""))'
+
+# pkill -f matches the full command line, and this shell's own command line contains
+# the pattern -- so the task used to kill itself before reaching dhclient, and "|| true"
+# hid it. Match the process name with -x instead and pick the PID out separately.
 - name: Drop the leftover dhclient
   ansible.builtin.shell: |
-    pkill -f "dhclient.*{{ nic }}" || true
-    ip addr show {{ nic }} | grep -q "dynamic" && ip addr flush dev {{ nic }} label "{{ nic }}" scope global || true
+    for p in $(pgrep -x dhclient 2>/dev/null); do
+      grep -qa -- "{{ nic }}" "/proc/$p/cmdline" 2>/dev/null && kill "$p"
+    done
+    ip addr show {{ nic }} | grep -q "dynamic" && ip addr flush dev {{ nic }} label "{{ nic }}" scope global dynamic || true
   changed_when: false
-  when: ifupdown_masked is changed
+  when: ifupdown_masked is changed or nm_masked is changed
 
 # backbone-2 died with a live kernel and a dead userspace: it still answered the TCP
 # handshake on port 22, but sshd never got far enough to send a banner, so the node
