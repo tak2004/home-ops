@@ -29,10 +29,16 @@
     openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //' | tee ~/.kube/key.pub
   args:
     creates: ~/.kube/key.pub
+# --kubeconfig ~/.kube/config, NOT /etc/kubernetes/admin.conf: that file does not exist
+# on a node that has never joined -- the task above uploads admin.conf to ~/.kube/config
+# instead. kubeadm honours the explicit flag and ignores KUBECONFIG, so the old path
+# produced an empty token, and "kubeadm join --token  k8scp:6443" then swallowed the
+# endpoint as the token value. This only ever worked on nodes that still carried an
+# admin.conf from an earlier life; a genuinely fresh control-plane node could not join.
 - name: Join the cluster.
   shell: |
     export KUBECONFIG=~/.kube/config
-    kubeadm join --token $( kubeadm token create --kubeconfig /etc/kubernetes/admin.conf ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane --skip-phases=addon/kube-proxy
+    kubeadm join --token $( kubeadm token create --kubeconfig ~/.kube/config ) {{ k8s_hostname }}:6443 --discovery-token-ca-cert-hash sha256:$( cat ~/.kube/key.pub ) --control-plane --skip-phases=addon/kube-proxy
   args:
     creates: /etc/kubernetes/kubelet.conf
 # Control-plane nodes carry a NoSchedule taint. backbone-1 has 8 GB and acts as the

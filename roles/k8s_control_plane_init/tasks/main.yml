@@ -1,13 +1,35 @@
 ---
+# The only guard on "kubeadm init" below is "creates: /etc/kubernetes/admin.conf", which
+# says nothing about whether a cluster already exists -- it only asks whether THIS node
+# was ever initialised. Point k8s_init_node at a rebuilt or replaced machine and the
+# role happily builds a SECOND cluster, with fresh CAs, next to the live one. This
+# check asks the running cluster instead: if the control-plane endpoint already answers,
+# there is nothing to initialise and the whole role is skipped.
+- name: Find out whether a cluster is already running behind the endpoint
+  ansible.builtin.uri:
+    url: "https://{{ k8s_hostname }}:6443/livez"
+    validate_certs: false
+    status_code: [200, 401, 403]
+    timeout: 10
+  register: existing_cluster
+  failed_when: false
+  changed_when: false
+  check_mode: false
+
 - name: Add Cluster config.
   ansible.builtin.template:
     src: kubeadm-config.j2
     dest: /tmp/kubeadm-config.yaml
+# Guarded on the task, not the role: everything after this -- the Cilium release and
+# especially the fetch block that puts the CA material into /tmp/k8s for
+# k8s_control_plane_join -- has to keep running on every pass, including the normal
+# case where the cluster is long since up.
 - name: Init cluster.
   shell: |
     kubeadm init --config=/tmp/kubeadm-config.yaml --skip-phases=addon/kube-proxy | tee /tmp/kubeadm-init.out
   args:
     creates: /etc/kubernetes/admin.conf
+  when: existing_cluster.status is not defined or existing_cluster.status not in [200, 401, 403]
 - name: Create kubectl directory.
   ansible.builtin.file:
     path: /root/.kube/

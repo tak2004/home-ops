@@ -3,7 +3,16 @@ all:
     ansible_ssh_private_key_file: ~/.ssh/homelab
     ansible_user: ansible
     gateway_ip: 192.168.1.1
-    k8s_init_node: backbone-2
+    # Points at the node that ran "kubeadm init" once, and it decides three things:
+    # init vs. join in k8s.yml, the keepalived MASTER role and priority 200, and the
+    # delegate_to of the LINSTOR tasks. Moved from backbone-2 to backbone-1 on
+    # 2026-10-05, because backbone-2 and -3 are about to be replaced: a NEW machine
+    # carrying the name backbone-2 would have matched this and run kubeadm init,
+    # building a second cluster beside the live one. backbone-1 stays, has 8 GB against
+    # the SBCs' 2, and is the LINSTOR tiebreaker anyway -- so it is the better anchor
+    # for all three. k8s_control_plane_init additionally refuses to initialise when the
+    # endpoint already answers.
+    k8s_init_node: backbone-1
     k8s_hostname: k8scp
     # k8scp resolves to the keepalived VIP rather than a single node, otherwise the
     # whole cluster endpoint depends on the init node. Defined for all groups because
@@ -109,13 +118,6 @@ backbone:
     backbone-3:
       ansible_host: 192.168.1.13
       nic: end1
-      # TEMPORARY, remove once backbone-1 has run backbone.yml again.
-      # The computed value would be 170, below the 190 backbone-1 still carries from
-      # the old template -- backbone-1 was unreachable on 2026-10-04 (0/3 SSH, ~97 %
-      # packet loss) and could not be rolled out. Leaving it at 170 would hand the VIP
-      # back to exactly that node the next time backbone-2 drops. 195 keeps backbone-3
-      # above backbone-1 without displacing the 200 of the master.
-      keepalived_priority: 195
 netsvc:
   vars:
     nic: enp6s0f0
