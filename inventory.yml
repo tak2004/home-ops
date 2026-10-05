@@ -105,13 +105,6 @@ backbone:
     backbone-1:
       ansible_host: 192.168.1.12
       nic: enp1s0
-      # Without nic_mac the netplan stanza keys on the interface NAME alone, and a
-      # rename leaves the node with no configuration at all -- silently, no error, no
-      # fallback. netsvc-1/-2 were hardened this way after exactly that happened; the
-      # backbones were not. Deliberately only set here: this is a Dell vendor MAC and
-      # therefore stable, while backbone-2/-3 are SBCs whose MACs carry the
-      # locally-administered bit, and both are about to be replaced by Dells anyway.
-      nic_mac: "6c:2b:59:49:92:0b"
       # Third vote for the two-replica DRBD resources, without storing data itself.
       # backbone-2 and -3 cannot do this: DRBD would have to be built for their
       # arm64 vendor kernel, and they have no kernel headers available.

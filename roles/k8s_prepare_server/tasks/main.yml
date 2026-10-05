@@ -174,12 +174,6 @@
       - lvm2
       - ipmitool
       - smartmontools
-      # The Wyse 5070 backbones carry a Realtek RTL8168h. Without this the driver
-      # runs the NIC unpatched -- noticed on 2026-10-05, when .117 loaded
-      # rtl_nic/rtl8168h-2.fw and the two trixie nodes did not. Harmless on a healthy
-      # card, but not something to leave to chance on the one hardware class in this
-      # cluster that has given trouble.
-      - firmware-realtek
     state: present
 
 # journald defaults to 10% of the filesystem, which is ~45G here -- on the same
