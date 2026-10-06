@@ -25,8 +25,11 @@
   roles:
   - role: k8s_control_plane_init
     when: inventory_hostname == k8s_init_node
+  # No "when" here: the role guards itself on creates: /etc/kubernetes/kubelet.conf, so a
+  # member skips the join. Excluding k8s_init_node instead meant that node could never
+  # rejoin after being reset -- it got the init role, whose kubeadm init is correctly
+  # refused while the endpoint answers, and the join role never at all.
   - role: k8s_control_plane_join
-    when: inventory_hostname != k8s_init_node
 
 - name: Get kubernetes data-plane running
   hosts: netsvc

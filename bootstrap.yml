@@ -56,46 +56,27 @@
       removes: /etc/netplan/10-dhcp-all-interfaces.yaml
     notify: Generate Netplan
 
-  # netplan renders through systemd-networkd. A NetworkManager running alongside it
-  # starts its own dhclient and adds a second, *dynamic* address to the same NIC --
-  # nothing in /etc/netplan shows it, and nothing reports an error. On backbone-1 that
-  # was the router's old DHCP reservation for this MAC: the node gave itself the IP of
-  # backbone-2, routed every packet for that peer to its own loopback, and etcd lost
-  # quorum after each reboot.
+  # The Debian installer leaves "allow-hotplug <nic>" and "iface <nic> inet dhcp" in
+  # /etc/network/interfaces, so ifupdown runs a dhclient on the very NIC netplan is
+  # about to configure statically. Done here as well as in k8s_prepare_server, because
+  # between bootstrap and the first k8s.yml run the node would otherwise sit there with
+  # two configurators.
   #
-  # Needed here because bootstrap runs before k8s.yml ever touches the node, but the
-  # same masking now also runs on every k8s_prepare_server pass -- once at provisioning
-  # was not enough. On backbone-1 the sibling case (ifupdown) was found unmasked on
-  # 2026-10-05 and cost the node 95 % of its inbound packets.
-  - name: Disable NetworkManager in favour of systemd-networkd
-    ansible.builtin.systemd:
-      name: NetworkManager
-      state: stopped
-      enabled: false
-      masked: true
-    register: nm_masked_bootstrap
-    # Not installed is fine; a real masking failure must not pass unnoticed.
-    failed_when:
-      - nm_masked_bootstrap is failed
-      - '"Could not find the requested service" not in (nm_masked_bootstrap.msg | default(""))'
-
-  # The Debian installer leaves "iface <nic> inet dhcp" in /etc/network/interfaces and
-  # networking.service enabled, so ifupdown runs a dhclient on the very NIC netplan is
-  # about to configure statically. Masked here and not only in k8s_prepare_server,
-  # because between bootstrap and the first k8s.yml run the node would otherwise sit
-  # there with two configurators -- exactly the state that cost backbone-1 a day.
-  # Observed on backbone-4 right after bootstrapping it on 2026-10-05: networking
-  # enabled, one dhclient running.
-  - name: Disable ifupdown in favour of systemd-networkd
-    ansible.builtin.systemd:
-      name: networking
-      state: stopped
-      enabled: false
-      masked: true
-    register: ifupdown_masked_bootstrap
-    failed_when:
-      - ifupdown_masked_bootstrap is failed
-      - '"Could not find the requested service" not in (ifupdown_masked_bootstrap.msg | default(""))'
+  # Masking networking.service -- what this used to do -- cannot help: allow-hotplug is
+  # executed by udev via ifup@<iface>.service, a unit the mask does not cover
+  # (Debian #866400). See the long note in roles/k8s_prepare_server/tasks/main.yml.
+  - name: Leave /etc/network/interfaces to loopback only
+    ansible.builtin.copy:
+      content: |
+        # Managed by Ansible. netplan renders through systemd-networkd and owns every
+        # interface on this host. Any stanza added here starts a competing
+        # ifup@<iface>.service via udev, regardless of networking.service.
+        auto lo
+        iface lo inet loopback
+      dest: /etc/network/interfaces
+      owner: root
+      group: root
+      mode: "0644"
 
   - name: Update Netplan Configuration
     template:
