@@ -16,3 +16,23 @@ etcd:
         value: periodic
       - name: auto-compaction-retention
         value: 8h
+# Accepts Authelia ID tokens, which is what Headlamp sends. client-id is the token's
+# audience, hence the Authelia client named kubernetes. The oidc: prefixes keep these
+# users and groups apart from Kubernetes' own -- the ClusterRoleBinding oidc-admins in
+# the apps repository relies on it. The CA file is put there by k8s.yml.
+apiServer:
+  extraArgs:
+    - name: oidc-issuer-url
+      value: https://auth.{{ k8s_subdomain }}.{{ dns_zone }}
+    - name: oidc-client-id
+      value: kubernetes
+    - name: oidc-username-claim
+      value: preferred_username
+    - name: oidc-username-prefix
+      value: "oidc:"
+    - name: oidc-groups-claim
+      value: groups
+    - name: oidc-groups-prefix
+      value: "oidc:"
+    - name: oidc-ca-file
+      value: /etc/kubernetes/pki/home-ca.crt
