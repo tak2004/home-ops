@@ -151,6 +151,14 @@
     - kubectl
     update_cache: yes
 
+# Debian's package enables kubelet on install, but nothing put it back after a manual
+# disable: on 2026-10-19 backbone-1 booted without it, its etcd member stayed down and
+# the control plane had no quorum for 2.5 days. Explicit, so --check shows the drift.
+- name: Enable kubelet
+  ansible.builtin.service:
+    name: kubelet
+    enabled: yes
+
 - name: Add helm repo key.
   shell: |
     curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | gpg --dearmor | tee /usr/share/keyrings/helm.gpg > /dev/null
